@@ -1,8 +1,4 @@
-try {
-  require('dotenv').config();
-} catch (e) {
-  // ignore dotenv load failures in environments that inject vars
-}
+require('dotenv').config();
 
 const fs = require('fs');
 const path = require('path');
@@ -34,10 +30,7 @@ async function run() {
     throw new Error('Knowledge base JSON must be an array.');
   }
 
-  await mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 10000 });
 
   const operations = docs
     .map((item, index) => {
@@ -79,10 +72,6 @@ async function run() {
 
 run().catch(async (error) => {
   console.error('Migration failed:', error.message);
-  try {
-    await mongoose.disconnect();
-  } catch (e) {
-    // ignore
-  }
+  await mongoose.disconnect().catch(() => {});
   process.exit(1);
 });

@@ -1,366 +1,212 @@
 const express = require('express');
-const router = express.Router();
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
-const crypto = require('crypto');
+const UserData = require('../models/user-data');
 const auth = require('../middleware/auth');
-const { 
-  sendPasswordResetEmail, 
-  sendResetSuccessEmail,
-  sendWelcomeEmail
-} = require('../utils/emailService');
+const { loginLimiter, accountLimiter } = require('../lib/rate-limit');
+const { PASSWORD_RULES, isEmail, isPassword, isName, isString } = require('../lib/validate');
+const { sendPasswordResetEmail, sendResetSuccessEmail, sendWelcomeEmail } = require('../utils/emailService');
 
-// Validation helper function
-const validateEmail = (email) => {
-  const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return re.test(String(email).toLowerCase());
-};
+const router = express.Router();
+const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://rapidroutines.org').replace(/\/$/, '');
+const RESET_WINDOW_MS = 60 * 60 * 1000;
+const RESET_SENT = 'If an account exists for that email, a reset link is on its way.';
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 12);
 
+const signToken = (user) =>
+  jwt.sign({ id: user.id, tv: user.tokenVersion || 0 }, process.env.JWT_SECRET, {
+    algorithm: 'HS256',
+    expiresIn: '7d',
+  });
 
-// Validation helper function
-const validatePassword = (password) => {
-  // At least 8 characters, one uppercase, one lowercase, one number, and allows special characters
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])[a-zA-Z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]{8,}$/;
-  return passwordRegex.test(password);
-};
+const publicUser = (user) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  joined: user.joined,
+  lastLogin: user.lastLogin,
+});
 
-// @route   POST /api/auth/register
-// @desc    Register user
-// @access  Public
-router.post('/register', async (req, res) => {
+const normalizeEmail = (email) => String(email).trim().toLowerCase();
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
+router.post('/register', accountLimiter, async (req, res) => {
   const { name, email, password } = req.body;
-
-  // Validate input
-  if (!name || !email || !password) {
-    return res.status(400).json({ message: 'Please enter all fields' });
+  if (!isName(name)) {
+    return res.status(400).json({ message: 'Enter a name up to 50 characters.' });
   }
-
-  // Validate email
-  if (!validateEmail(email)) {
-    return res.status(400).json({ message: 'Invalid email format' });
+  if (!isEmail(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address.' });
   }
-
-  // Validate password
-  if (!validatePassword(password)) {
-    return res.status(400).json({ 
-      message: 'Password must be at least 8 characters long and contain one uppercase letter, one lowercase letter, and one number' 
-    });
+  if (!isPassword(password)) {
+    return res.status(400).json({ message: PASSWORD_RULES });
   }
 
   try {
-    // Check if user exists
-    let user = await User.findOne({ email });
-    if (user) {
-      return res.status(400).json({ message: 'User already exists' });
+    const normalized = normalizeEmail(email);
+    if (await User.exists({ email: normalized })) {
+      return res.status(400).json({ message: 'Could not create an account with that email.' });
     }
 
-    // Create new user
-    user = new User({
-      name,
-      email,
-      password
-    });
-
-    // Save user to database
-    await user.save();
-
-    // Create JWT token
-    const token = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Send welcome email
-    try {
-      await sendWelcomeEmail(email, name);
-    } catch (emailError) {
-      console.error('Welcome email send failed:', emailError);
-      // Non-critical error, so we'll still return success
-    }
-
-    // Return token and user data
-    res.status(201).json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        joined: user.joined,
-        lastLogin: user.lastLogin
-      }
-    });
+    const user = await User.create({ name: name.trim(), email: normalized, password });
+    sendWelcomeEmail(user.email, user.name).catch((err) => console.error('Welcome email failed:', err.message));
+    res.status(201).json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server error during registration' });
+    console.error('Register failed:', err.message);
+    res.status(500).json({ message: 'Could not create the account. Try again.' });
   }
 });
 
-// @route   POST /api/auth/login
-// @desc    Login user
-// @access  Public
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
-
-  // Validate input
-  if (!email || !password) {
-    return res.status(400).json({ 
-      message: 'Please enter both email and password',
-      details: { 
-        field: !email ? 'email' : 'password'
-      }
-    });
-  }
-
-  // Validate email format
-  if (!validateEmail(email)) {
-    return res.status(400).json({ 
-      message: 'Invalid email format',
-      details: { field: 'email' }
-    });
+  if (!isEmail(email) || !isString(password, 128)) {
+    return res.status(400).json({ message: 'Incorrect email or password.' });
   }
 
   try {
-    // Check if user exists
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ 
-        message: 'Invalid credentials', 
-        details: { field: 'email' }
-      });
+    const user = await User.findOne({ email: normalizeEmail(email) });
+    const matches = user ? await user.matchPassword(password) : await bcrypt.compare(password, DUMMY_HASH);
+    if (!user || !matches) {
+      return res.status(400).json({ message: 'Incorrect email or password.' });
     }
 
-    // Check password
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      return res.status(400).json({ 
-        message: 'Invalid credentials',
-        details: { field: 'password' }
-      });
-    }
-
-    // Update last login timestamp
     user.lastLogin = Date.now();
     await user.save();
-
-    // Create JWT token
-    const token = jwt.sign(
-      { id: user.id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Return token and user data
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        joined: user.joined,
-        lastLogin: user.lastLogin
-      }
-    });
+    res.json({ token: signToken(user), user: publicUser(user) });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server error during login' });
+    console.error('Login failed:', err.message);
+    res.status(500).json({ message: 'Could not sign in. Try again.' });
   }
 });
 
-// @route   GET /api/auth/user
-// @desc    Get user data
-// @access  Private
 router.get('/user', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    res.json({ user });
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'Account not found.' });
+    res.json({ user: publicUser(user) });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server error retrieving user data' });
+    console.error('Load user failed:', err.message);
+    res.status(500).json({ message: 'Could not load your account.' });
   }
 });
 
-// @route   POST /api/auth/forgot-password
-// @desc    Send password reset email
-// @access  Public
-router.post('/forgot-password', async (req, res) => {
+router.post('/logout', auth, async (req, res) => {
+  try {
+    await User.updateOne({ _id: req.user.id }, { $inc: { tokenVersion: 1 } });
+    res.json({ message: 'Signed out on all devices.' });
+  } catch (err) {
+    console.error('Logout failed:', err.message);
+    res.status(500).json({ message: 'Could not sign out. Try again.' });
+  }
+});
+
+router.post('/forgot-password', accountLimiter, async (req, res) => {
   const { email } = req.body;
-
-  // Validate email
-  if (!email) {
-    return res.status(400).json({ message: 'Please provide an email address' });
-  }
-
-  if (!validateEmail(email)) {
-    return res.status(400).json({ message: 'Invalid email format' });
+  if (!isEmail(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address.' });
   }
 
   try {
-    // Check if user exists
-    const user = await User.findOne({ email });
-    if (!user) {
-      // Don't reveal that the user doesn't exist
-      return res.status(200).json({ message: 'If an account exists with this email, a password reset link will be sent.' });
+    const user = await User.findOne({ email: normalizeEmail(email) });
+    if (user) {
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      user.resetPasswordToken = hashToken(resetToken);
+      user.resetPasswordExpires = Date.now() + RESET_WINDOW_MS;
+      await user.save();
+      sendPasswordResetEmail(user.email, `${FRONTEND_URL}/dashboard/reset-password/${resetToken}`).catch((err) =>
+        console.error('Reset email failed:', err.message),
+      );
     }
-
-    // Generate reset token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    
-    // Set token and expiration
-    user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
-    await user.save();
-
-    // Create reset URL
-    const resetUrl = `${req.headers.origin || 'https://rapidroutines.org'}/reset-password/${resetToken}`;
-
-    // Send password reset email
-    try {
-      await sendPasswordResetEmail(email, resetUrl);
-    } catch (emailError) {
-      console.error('Password reset email send failed:', emailError);
-      return res.status(500).json({ message: 'Error sending password reset email' });
-    }
-
-    res.status(200).json({ message: 'Password reset email sent. Please check your inbox.' });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server error during password reset request' });
+    console.error('Forgot password failed:', err.message);
   }
+  res.json({ message: RESET_SENT });
 });
 
-// @route   POST /api/auth/reset-password
-// @desc    Reset password with token
-// @access  Public
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', accountLimiter, async (req, res) => {
   const { token, password } = req.body;
-
-  // Validate input
-  if (!token) {
-    return res.status(400).json({ message: 'Reset token is required' });
+  if (!isString(token, 128)) {
+    return res.status(400).json({ message: 'This reset link is invalid or has expired.' });
   }
-
-  // Validate password
-  if (!password) {
-    return res.status(400).json({ message: 'New password is required' });
-  }
-
-  if (!validatePassword(password)) {
-    return res.status(400).json({ 
-      message: 'Password must be at least 8 characters long and contain one uppercase letter, one lowercase letter, and one number' 
-    });
+  if (!isPassword(password)) {
+    return res.status(400).json({ message: PASSWORD_RULES });
   }
 
   try {
-    // Hash the token for comparison
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-
-    // Find user with valid token
     const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() }
+      resetPasswordToken: hashToken(token),
+      resetPasswordExpires: { $gt: Date.now() },
     });
-
     if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired token' });
+      return res.status(400).json({ message: 'This reset link is invalid or has expired.' });
     }
 
-    // Set new password
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
-
-    // Send password reset success email
-    try {
-      await sendResetSuccessEmail(user.email);
-    } catch (emailError) {
-      console.error('Password reset success email send failed:', emailError);
-      // Non-critical error, so we'll still return success
-    }
-
-    res.status(200).json({ message: 'Password updated successfully' });
+    sendResetSuccessEmail(user.email).catch((err) => console.error('Reset confirmation failed:', err.message));
+    res.json({ message: 'Password updated. Sign in with your new password.' });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server error during password reset' });
+    console.error('Reset password failed:', err.message);
+    res.status(500).json({ message: 'Could not reset the password. Try again.' });
   }
 });
 
-// @route   PUT /api/auth/update-profile
-// @desc    Update user profile
-// @access  Private
 router.put('/update-profile', auth, async (req, res) => {
-  const { name, email } = req.body;
-
-  // Validate input
-  if (!name) {
-    return res.status(400).json({ message: 'Name is required' });
+  const { name, email, currentPassword } = req.body;
+  if (!isName(name)) {
+    return res.status(400).json({ message: 'Enter a name up to 50 characters.' });
   }
-
-  if (email && !validateEmail(email)) {
-    return res.status(400).json({ message: 'Invalid email format' });
+  if (email !== undefined && !isEmail(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address.' });
   }
 
   try {
     const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'Account not found.' });
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Update name
-    user.name = name;
-
-    // Update email if provided and different
-    if (email && email !== user.email) {
-      // Check if new email is already in use
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({ message: 'Email already in use' });
+    user.name = name.trim();
+    let token;
+    const nextEmail = email === undefined ? user.email : normalizeEmail(email);
+    if (nextEmail !== user.email) {
+      if (!isString(currentPassword, 128) || !(await user.matchPassword(currentPassword))) {
+        return res.status(403).json({ message: 'Enter your current password to change your email.' });
       }
-      user.email = email;
+      if (await User.exists({ email: nextEmail })) {
+        return res.status(400).json({ message: 'That email is already in use.' });
+      }
+      user.email = nextEmail;
+      user.tokenVersion = (user.tokenVersion || 0) + 1;
+      token = signToken(user);
     }
 
     await user.save();
-
-    res.json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        joined: user.joined,
-        lastLogin: user.lastLogin
-      }
-    });
+    res.json({ user: publicUser(user), ...(token && { token }) });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Server error updating profile' });
+    console.error('Update profile failed:', err.message);
+    res.status(500).json({ message: 'Could not update your profile.' });
   }
 });
 
-// @route   DELETE /api/auth/delete-account
-// @desc    Delete user account and all associated data
-// @access  Private
 router.delete('/delete-account', auth, async (req, res) => {
+  const { currentPassword } = req.body || {};
   try {
-    const userId = req.user.id;
-    
-    // First delete all user data
-    const UserData = require('../models/user-data');
-    await UserData.findOneAndDelete({ user: userId });
-    
-    // Then delete the user account itself
-    await User.findByIdAndDelete(userId);
-    
-    res.status(200).json({ message: 'Account and all associated data deleted successfully' });
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: 'Account not found.' });
+    if (!isString(currentPassword, 128) || !(await user.matchPassword(currentPassword))) {
+      return res.status(403).json({ message: 'Enter your current password to delete your account.' });
+    }
+
+    await UserData.deleteOne({ user: user.id });
+    await User.deleteOne({ _id: user.id });
+    res.json({ message: 'Your account and data were deleted.' });
   } catch (err) {
-    console.error('Error deleting user account:', err.message);
-    res.status(500).json({ message: 'Server error deleting account' });
+    console.error('Delete account failed:', err.message);
+    res.status(500).json({ message: 'Could not delete the account.' });
   }
 });
 

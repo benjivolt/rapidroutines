@@ -55,10 +55,8 @@ export const ExerciseProvider = ({ children }) => {
         console.error("Error saving exercise:", error);
         return false;
       }
-    } else {
-      console.log("Exercise not saved: User not authenticated");
-      return false;
     }
+    return false;
   };
 
   const deleteExercise = async (exerciseId) => {

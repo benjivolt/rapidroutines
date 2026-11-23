@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const ChatbotKnowledge = require('../models/chatbotKnowledge');
+const { chatbotLimiter } = require('../lib/rate-limit');
 
 const router = express.Router();
 const knowledgeBasePath = path.join(__dirname, '..', 'data', 'chatbot-knowledge-base.json');
@@ -10,7 +11,7 @@ let fallbackKnowledgeBase = [];
 try {
   fallbackKnowledgeBase = JSON.parse(fs.readFileSync(knowledgeBasePath, 'utf8'));
 } catch (error) {
-  console.error('Failed to load chatbot knowledge base:', error.message);
+  if (error.code !== 'ENOENT') console.error('Failed to load chatbot knowledge base:', error.message);
 }
 
 function tokenize(text) {
@@ -19,10 +20,6 @@ function tokenize(text) {
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((token) => token.length > 2);
-}
-
-function rankRelevantDocuments(query) {
-  return rankRelevantDocumentsFromCollection(query, fallbackKnowledgeBase);
 }
 
 function rankRelevantDocumentsFromCollection(query, collection) {
@@ -38,9 +35,7 @@ function rankRelevantDocumentsFromCollection(query, collection) {
         return { doc: { content: '' }, score: 0 };
       }
 
-      const docTokens = Array.isArray(doc?.tokens) && doc.tokens.length
-        ? doc.tokens
-        : tokenize(content);
+      const docTokens = Array.isArray(doc?.tokens) && doc.tokens.length ? doc.tokens : tokenize(content);
       let score = 0;
       for (const token of docTokens) {
         if (queryTokens.has(token)) score += 1;
@@ -87,7 +82,7 @@ function buildPrompt(query, relevantDocs, context) {
     'Do not use markdown heading syntax with #, ##, or ###. ',
     'Use plain section titles (prefer **bold titles**) and bullet points that start with "- ". ',
     'Do not use code blocks. Do not include unnecessary symbols. ',
-    'If the user greets you, greet them back simply. Ask one follow-up question if the query is too general.'
+    'If the user greets you, greet them back simply. Ask one follow-up question if the query is too general.',
   );
 
   return parts.join('');
@@ -98,13 +93,11 @@ function normalizeChatbotText(text) {
     .replace(/\r\n/g, '\n')
     .split('\n')
     .map((line) => {
-      // Convert markdown headings into bold section titles.
       const headingMatch = line.match(/^\s{0,3}#{1,6}\s*(.+?)\s*$/);
       if (headingMatch) {
         return `**${headingMatch[1]}**`;
       }
 
-      // Normalize bullet markers to "- ".
       const bulletMatch = line.match(/^\s*[\*\u2022]\s+(.+)$/);
       if (bulletMatch) {
         return `- ${bulletMatch[1]}`;
@@ -113,64 +106,67 @@ function normalizeChatbotText(text) {
       return line;
     });
 
-  return normalizedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return normalizedLines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
-router.post('/generate', async (req, res) => {
+const MAX_QUERY = 2000;
+const MAX_TURNS = 6;
+const KB_TTL_MS = 5 * 60 * 1000;
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+let knowledgeCache = { docs: null, loadedAt: 0 };
+
+async function knowledgeDocs() {
+  if (knowledgeCache.docs && Date.now() - knowledgeCache.loadedAt < KB_TTL_MS) return knowledgeCache.docs;
+  const docs = await ChatbotKnowledge.find({}, { content: 1, tokens: 1, _id: 0 }).lean();
+  knowledgeCache = { docs: docs.length ? docs : fallbackKnowledgeBase, loadedAt: Date.now() };
+  return knowledgeCache.docs;
+}
+
+function cleanContext(context) {
+  if (!Array.isArray(context)) return [];
+  return context
+    .filter((msg) => msg && (msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string')
+    .slice(-MAX_TURNS)
+    .map((msg) => ({ role: msg.role, content: msg.content.slice(0, MAX_QUERY) }));
+}
+
+router.post('/generate', chatbotLimiter, async (req, res) => {
+  const userQuery = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+  if (!userQuery || userQuery.length > MAX_QUERY) {
+    return res.status(400).json({ error: `Send a message between 1 and ${MAX_QUERY} characters.` });
+  }
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('GEMINI_API_KEY is not set');
+    return res.status(503).json({ error: 'The assistant is unavailable right now.' });
+  }
+
   try {
-    const userQuery = String(req.body?.query || '').trim();
-    const context = Array.isArray(req.body?.context) ? req.body.context : [];
-
-    if (!userQuery) {
-      return res.status(400).json({ error: 'Missing query' });
-    }
-
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY not set in environment variables.' });
-    }
-
-    const mongoDocs = await ChatbotKnowledge.find({}, { content: 1, tokens: 1, _id: 0 }).lean();
-    const sourceDocs = mongoDocs.length > 0 ? mongoDocs : fallbackKnowledgeBase;
-    const relevantDocs = rankRelevantDocumentsFromCollection(userQuery, sourceDocs);
-    const prompt = buildPrompt(userQuery, relevantDocs, context);
-    const geminiApiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
-    const url = `${geminiApiUrl}?key=${geminiApiKey}`;
-
-    const geminiResponse = await fetch(url, {
+    const relevantDocs = rankRelevantDocumentsFromCollection(userQuery, await knowledgeDocs());
+    const prompt = buildPrompt(userQuery, relevantDocs, cleanContext(req.body?.context));
+    const geminiResponse = await fetch(GEMINI_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1024 },
       }),
+      signal: AbortSignal.timeout(20000),
     });
 
-    const contentType = geminiResponse.headers.get('content-type') || '';
-    const rawBody = await geminiResponse.text();
-
-    if (!contentType.includes('application/json')) {
-      return res.status(geminiResponse.status).json({
-        error: 'Expected JSON from Gemini',
-        details: rawBody.slice(0, 500),
-      });
+    const body = await geminiResponse.json().catch(() => null);
+    const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!geminiResponse.ok || typeof text !== 'string' || !text.trim()) {
+      console.error('Gemini error:', geminiResponse.status, JSON.stringify(body?.error || {}).slice(0, 300));
+      return res.status(502).json({ error: 'The assistant could not answer that. Try again.' });
     }
 
-    let parsedBody;
-    try {
-      parsedBody = JSON.parse(rawBody);
-    } catch (error) {
-      return res.status(geminiResponse.status).type('application/json').send(rawBody);
-    }
-
-    const generatedText = parsedBody?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (typeof generatedText === 'string' && generatedText.trim()) {
-      parsedBody.candidates[0].content.parts[0].text = normalizeChatbotText(generatedText);
-    }
-
-    return res.status(geminiResponse.status).json(parsedBody);
+    return res.json({ candidates: [{ content: { parts: [{ text: normalizeChatbotText(text) }] } }] });
   } catch (error) {
-    console.error('Chatbot generation error:', error);
-    return res.status(500).json({ error: 'Unable to generate response right now.' });
+    console.error('Chatbot generation error:', error.message);
+    return res.status(502).json({ error: 'The assistant could not answer that. Try again.' });
   }
 });
 

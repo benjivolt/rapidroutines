@@ -22,6 +22,9 @@ const ProfilePage = () => {
     const [successMessage, setSuccessMessage] = useState("");
     const [errorMessage, setErrorMessage] = useState("");
     const [isEditing, setIsEditing] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [deletePassword, setDeletePassword] = useState("");
+    const emailChanged = Boolean(user && email.trim().toLowerCase() !== (user.email || "").toLowerCase());
     
     const chatHistoryCount = getChatHistory().length;
     const exercisesCount = getExercises().length;
@@ -58,14 +61,18 @@ const ProfilePage = () => {
             return;
         }
         
-        const userData = {
-            name: displayName,
-            email: email
-        };
-        
-        const success = await updateProfile(userData);
-        
-        if (success) {
+        if (emailChanged && !currentPassword) {
+            setErrorMessage("Enter your current password to change your email");
+            return;
+        }
+
+        const userData = { name: displayName, email, ...(emailChanged && { currentPassword }) };
+        const result = await updateProfile(userData);
+        setCurrentPassword("");
+
+        if (result !== true) {
+            setErrorMessage(typeof result === "string" ? result : "Could not update your profile");
+        } else {
             setSuccessMessage("Profile updated successfully!");
             setIsEditing(false);
             setErrorMessage("");
@@ -140,17 +147,22 @@ const ProfilePage = () => {
     };
     
     const handleDeleteAccount = async () => {
+        if (!deletePassword) {
+            setErrorMessage("Enter your password to delete your account");
+            return;
+        }
         if (confirm("Are you sure you want to delete your account and all associated data? This action cannot be undone.")) {
             try {
-                const success = await deleteAccount();
-                
-                if (success) {
+                const result = await deleteAccount(deletePassword);
+                setDeletePassword("");
+
+                if (result === true) {
                     setSuccessMessage("Account deleted successfully. Redirecting...");
                     setTimeout(() => {
                         navigate("/");
                     }, 2000);
                 } else {
-                    setErrorMessage("Error deleting account. Please try again.");
+                    setErrorMessage(typeof result === "string" ? result : "Could not delete your account");
                     setTimeout(() => {
                         setErrorMessage("");
                     }, 3000);
@@ -285,6 +297,19 @@ const ProfilePage = () => {
                                             className="w-full rounded-md border border-slate-300 p-2 focus:border-[#1e628c] focus:outline-none focus:ring-1 focus:ring-[#1e628c]"
                                         />
                                     </div>
+
+                                    {emailChanged && (
+                                        <div className="rounded-lg border border-slate-200 p-4">
+                                            <label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label>
+                                            <input
+                                                type="password"
+                                                autoComplete="current-password"
+                                                value={currentPassword}
+                                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                                className="w-full rounded-md border border-slate-300 p-2 focus:border-[#1e628c] focus:outline-none focus:ring-1 focus:ring-[#1e628c]"
+                                            />
+                                        </div>
+                                    )}
                                     
                                     <div className="rounded-lg border border-slate-200 p-4">
                                         <div className="flex items-center gap-3">
@@ -349,7 +374,16 @@ const ProfilePage = () => {
                                         </div>
                                     </div>
                                     
-                                    <div className="mt-6 pt-6 border-t border-slate-200">
+                                    <div className="mt-6 pt-6 border-t border-slate-200 flex flex-wrap items-center gap-3">
+                                        <input
+                                            type="password"
+                                            autoComplete="current-password"
+                                            placeholder="Password"
+                                            aria-label="Password to confirm account deletion"
+                                            value={deletePassword}
+                                            onChange={(e) => setDeletePassword(e.target.value)}
+                                            className="rounded-md border border-slate-300 p-2 text-sm focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400"
+                                        />
                                         <button 
                                             className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-100"
                                             onClick={handleDeleteAccount}

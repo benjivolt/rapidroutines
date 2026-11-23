@@ -1,84 +1,48 @@
 function showEnhancedTypingEffect(text, textElement, incomingMessageDiv, speed = 5) {
-  if (!text) {
-    text = "";
-    console.error("Received undefined or null text in typing effect");
-  }
-  
-  const segments = window.messageUtils.parseFormattingElements(text);
-
+  const segments = window.messageUtils.parseFormattingElements(text || "");
   const characters = [];
-  
-  segments.forEach(segment => {
+  segments.forEach((segment) => {
     if (segment.lineBreak) {
-      characters.push({ 
-        char: '<br>', 
-        bold: false, 
-        lineBreak: true 
-      });
+      characters.push({ lineBreak: true });
     } else {
-      for (const char of segment.text) {
-        characters.push({ 
-          char, 
-          bold: segment.bold 
-        });
-      }
+      for (const char of segment.text) characters.push({ char, bold: segment.bold });
     }
   });
 
-  textElement.innerHTML = '';
-
-  let currentCharIndex = 0;
-  let currentHTML = '';
-  let inBoldSegment = false;
+  textElement.replaceChildren();
+  const icon = incomingMessageDiv.querySelector(".icon");
+  let index = 0;
+  let current = null;
 
   const typingInterval = setInterval(() => {
-    for (let i = 0; i < speed; i++) { 
-      if (currentCharIndex >= characters.length) {
-        clearInterval(typingInterval);
-        window.chatApp.isResponseGenerating = false;
-
-        const icon = incomingMessageDiv.querySelector(".icon");
-        if (icon) icon.classList.remove("hide");
-
-    
-        break;
+    for (let i = 0; i < speed && index < characters.length; i++, index++) {
+      const item = characters[index];
+      if (item.lineBreak) {
+        textElement.appendChild(document.createElement("br"));
+        current = null;
+        continue;
       }
-
-      const charInfo = characters[currentCharIndex];
-
-      if (charInfo.bold && !inBoldSegment) {
-        currentHTML += '<strong>';
-        inBoldSegment = true;
-      } else if (!charInfo.bold && inBoldSegment) {
-        currentHTML += '</strong>';
-        inBoldSegment = false;
+      if (!current || current.bold !== item.bold) {
+        const node = item.bold ? document.createElement("strong") : document.createElement("span");
+        textElement.appendChild(node);
+        current = { node, bold: item.bold };
       }
-
-      if (charInfo.lineBreak) {
-        currentHTML += '<br>';
-      } else {
-        currentHTML += charInfo.char;
-      }
-
-      currentCharIndex++;
+      current.node.textContent += item.char;
     }
 
-    if (inBoldSegment && currentCharIndex >= characters.length) {
-      currentHTML += '</strong>';
-    }
-
-    textElement.innerHTML = currentHTML;
-
-    const icon = incomingMessageDiv.querySelector(".icon");
-    if (icon) icon.classList.add("hide");
-
+    if (icon) icon.classList.toggle("hide", index < characters.length);
     window.chatApp.chatContainer.scrollTo(0, window.chatApp.chatContainer.scrollHeight);
-  }, 20); 
+
+    if (index >= characters.length) {
+      clearInterval(typingInterval);
+      window.chatApp.isResponseGenerating = false;
+    }
+  }, 20);
 }
 
 window.typingEffects = {
   showEnhancedTypingEffect,
-  showSlowerTypingEffect: function(text, textElement, incomingMessageDiv) {
+  showSlowerTypingEffect(text, textElement, incomingMessageDiv) {
     showEnhancedTypingEffect(text, textElement, incomingMessageDiv, 3);
-  }
+  },
 };

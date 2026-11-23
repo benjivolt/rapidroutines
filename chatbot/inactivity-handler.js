@@ -4,7 +4,7 @@ window.chatApp = window.chatApp || {};
 
 window.chatApp.inactivityTracker = {
 
-  inactivityTimeout: 180000, // 3 minutes 
+  inactivityTimeout: 3 * 60 * 1000,
   redirectUrl: "/chatbot",
   inactivityTimer: null,
   lastActivityTime: Date.now(),

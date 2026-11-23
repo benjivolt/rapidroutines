@@ -1,10 +1,20 @@
 const express = require('express');
 
+const { repbotLimiter } = require('../lib/rate-limit');
+
 const router = express.Router();
 const exerciseStates = new Map();
+const MAX_SESSIONS = 5000;
+const SESSION_TTL_MS = 30 * 60 * 1000;
+const SESSION_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const REP_COOLDOWN_MS = 1000;
+const HOLD_THRESHOLD_MS = 500;
 
-function nowMs() {
-  return Date.now();
+function pruneStates(now) {
+  for (const [key, state] of exerciseStates) {
+    if (now - state.touchedAt > SESSION_TTL_MS || exerciseStates.size > MAX_SESSIONS) exerciseStates.delete(key);
+    else break;
+  }
 }
 
 function getStateKey(sessionId, exerciseType, remoteAddr) {
@@ -13,22 +23,25 @@ function getStateKey(sessionId, exerciseType, remoteAddr) {
 }
 
 function getState(key, exerciseType) {
-  if (!exerciseStates.has(key)) {
-    exerciseStates.set(key, {
-      repCounter: 0,
-      stage: 'down',
-      lastRepTime: 0,
-      leftArmStage: 'down',
-      rightArmStage: 'down',
-      leftLegStage: 'down',
-      rightLegStage: 'down',
-      holdStart: 0,
-      leftHoldStart: 0,
-      rightHoldStart: 0,
-      exerciseType,
-    });
-  }
-  return exerciseStates.get(key);
+  const now = Date.now();
+  pruneStates(now);
+  const state = exerciseStates.get(key) || {
+    repCounter: 0,
+    stage: 'down',
+    lastRepTime: 0,
+    leftArmStage: 'down',
+    rightArmStage: 'down',
+    leftLegStage: 'down',
+    rightLegStage: 'down',
+    holdStart: 0,
+    leftHoldStart: 0,
+    rightHoldStart: 0,
+    exerciseType,
+  };
+  state.touchedAt = now;
+  exerciseStates.delete(key);
+  exerciseStates.set(key, state);
+  return state;
 }
 
 function isPoint(p) {
@@ -96,7 +109,7 @@ function processBicepCurl(landmarks, state, currentTime, cooldown, holdThreshold
 function processSquat(landmarks, state, currentTime, cooldown) {
   const leftKnee = angle(landmarks[23], landmarks[25], landmarks[27]);
   const rightKnee = angle(landmarks[24], landmarks[26], landmarks[28]);
-  const avg = leftKnee != null && rightKnee != null ? (leftKnee + rightKnee) / 2 : leftKnee ?? rightKnee;
+  const avg = leftKnee != null && rightKnee != null ? (leftKnee + rightKnee) / 2 : (leftKnee ?? rightKnee);
   const result = { repCounter: state.repCounter, stage: state.stage, angles: {} };
 
   if (leftKnee != null) result.angles.L = { value: leftKnee, position: landmarks[25] };
@@ -117,7 +130,7 @@ function processSquat(landmarks, state, currentTime, cooldown) {
 function processPushup(landmarks, state, currentTime, cooldown) {
   const left = angle(landmarks[11], landmarks[13], landmarks[15]);
   const right = angle(landmarks[12], landmarks[14], landmarks[16]);
-  const avg = left != null && right != null ? (left + right) / 2 : left ?? right;
+  const avg = left != null && right != null ? (left + right) / 2 : (left ?? right);
   const result = { repCounter: state.repCounter, stage: state.stage, angles: {} };
   if (left != null) result.angles.L = { value: left, position: landmarks[13] };
   if (right != null) result.angles.R = { value: right, position: landmarks[14] };
@@ -138,7 +151,7 @@ function processPushup(landmarks, state, currentTime, cooldown) {
 function processShoulderPress(landmarks, state, currentTime, cooldown) {
   const left = angle(landmarks[13], landmarks[11], landmarks[23]);
   const right = angle(landmarks[14], landmarks[12], landmarks[24]);
-  const avg = left != null && right != null ? (left + right) / 2 : left ?? right;
+  const avg = left != null && right != null ? (left + right) / 2 : (left ?? right);
   const result = { repCounter: state.repCounter, stage: state.stage, angles: {} };
   if (left != null) result.angles.L = { value: left, position: landmarks[11] };
   if (right != null) result.angles.R = { value: right, position: landmarks[12] };
@@ -159,7 +172,7 @@ function processShoulderPress(landmarks, state, currentTime, cooldown) {
 function processTricepExtension(landmarks, state, currentTime, cooldown) {
   const left = angle(landmarks[11], landmarks[13], landmarks[15]);
   const right = angle(landmarks[12], landmarks[14], landmarks[16]);
-  const avg = left != null && right != null ? (left + right) / 2 : left ?? right;
+  const avg = left != null && right != null ? (left + right) / 2 : (left ?? right);
   const result = { repCounter: state.repCounter, stage: state.stage, angles: {} };
   if (left != null) result.angles.L = { value: left, position: landmarks[13] };
   if (right != null) result.angles.R = { value: right, position: landmarks[14] };
@@ -180,7 +193,7 @@ function processTricepExtension(landmarks, state, currentTime, cooldown) {
 function processLunge(landmarks, state, currentTime, cooldown) {
   const left = angle(landmarks[23], landmarks[25], landmarks[27]);
   const right = angle(landmarks[24], landmarks[26], landmarks[28]);
-  const minKnee = left != null && right != null ? Math.min(left, right) : left ?? right;
+  const minKnee = left != null && right != null ? Math.min(left, right) : (left ?? right);
   const result = { repCounter: state.repCounter, stage: state.stage, angles: {} };
   if (left != null) result.angles.L = { value: left, position: landmarks[25] };
   if (right != null) result.angles.R = { value: right, position: landmarks[26] };
@@ -203,12 +216,12 @@ function processRussianTwist(landmarks, state, currentTime, cooldown) {
   const rightShoulder = landmarks[12];
   const leftHip = landmarks[23];
   const rightHip = landmarks[24];
-  const midShoulder = isPoint(leftShoulder) && isPoint(rightShoulder)
-    ? { x: (leftShoulder.x + rightShoulder.x) / 2, y: (leftShoulder.y + rightShoulder.y) / 2 }
-    : null;
-  const midHip = isPoint(leftHip) && isPoint(rightHip)
-    ? { x: (leftHip.x + rightHip.x) / 2, y: (leftHip.y + rightHip.y) / 2 }
-    : null;
+  const midShoulder =
+    isPoint(leftShoulder) && isPoint(rightShoulder)
+      ? { x: (leftShoulder.x + rightShoulder.x) / 2, y: (leftShoulder.y + rightShoulder.y) / 2 }
+      : null;
+  const midHip =
+    isPoint(leftHip) && isPoint(rightHip) ? { x: (leftHip.x + rightHip.x) / 2, y: (leftHip.y + rightHip.y) / 2 } : null;
 
   const result = { repCounter: state.repCounter, stage: state.stage, angles: {} };
   if (!midShoulder || !midHip) return result;
@@ -226,48 +239,30 @@ function processRussianTwist(landmarks, state, currentTime, cooldown) {
   return result;
 }
 
-router.post('/process_landmarks', (req, res) => {
+const PROCESSORS = {
+  bicepCurl: processBicepCurl,
+  squat: processSquat,
+  pushup: processPushup,
+  shoulderPress: processShoulderPress,
+  tricepExtension: processTricepExtension,
+  lunge: processLunge,
+  russianTwist: processRussianTwist,
+};
+
+router.post('/process_landmarks', repbotLimiter, (req, res) => {
   try {
-    const landmarks = Array.isArray(req.body?.landmarks) ? req.body.landmarks : [];
-    const exerciseType = String(req.body?.exerciseType || 'bicepCurl');
-    const sessionId = String(req.body?.sessionId || '');
+    const landmarks = Array.isArray(req.body?.landmarks) ? req.body.landmarks.slice(0, 33) : [];
+    const requested = req.body?.exerciseType;
+    const exerciseType =
+      typeof requested === 'string' && Object.hasOwn(PROCESSORS, requested) ? requested : 'bicepCurl';
+    const rawSessionId = req.body?.sessionId;
+    const sessionId = typeof rawSessionId === 'string' && SESSION_RE.test(rawSessionId) ? rawSessionId : '';
 
-    const key = getStateKey(sessionId, exerciseType, req.ip);
-    const state = getState(key, exerciseType);
-    const currentTime = nowMs();
-    const cooldown = 1000;
-    const holdThreshold = 500;
-
-    let result = { repCounter: state.repCounter, stage: state.stage, feedback: '' };
-    switch (exerciseType) {
-      case 'squat':
-        result = processSquat(landmarks, state, currentTime, cooldown);
-        break;
-      case 'pushup':
-        result = processPushup(landmarks, state, currentTime, cooldown);
-        break;
-      case 'shoulderPress':
-        result = processShoulderPress(landmarks, state, currentTime, cooldown);
-        break;
-      case 'tricepExtension':
-        result = processTricepExtension(landmarks, state, currentTime, cooldown);
-        break;
-      case 'lunge':
-        result = processLunge(landmarks, state, currentTime, cooldown);
-        break;
-      case 'russianTwist':
-        result = processRussianTwist(landmarks, state, currentTime, cooldown);
-        break;
-      case 'bicepCurl':
-      default:
-        result = processBicepCurl(landmarks, state, currentTime, cooldown, holdThreshold);
-        break;
-    }
-
-    return res.json(result);
+    const state = getState(getStateKey(sessionId, exerciseType, req.ip), exerciseType);
+    return res.json(PROCESSORS[exerciseType](landmarks, state, Date.now(), REP_COOLDOWN_MS, HOLD_THRESHOLD_MS));
   } catch (error) {
     console.error('RepBot processing error:', error);
-    return res.status(500).json({ error: String(error?.message || error) });
+    return res.status(500).json({ error: 'Could not process this frame.' });
   }
 });
 

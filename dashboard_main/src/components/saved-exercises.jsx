@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useSavedExercises } from "@/contexts/saved-exercises-context";
 import { Link } from "react-router-dom";
-import { BookmarkCheck, ChevronRight, Trash2, AlertCircle } from "lucide-react";
+import { BookmarkCheck, ChevronRight, AlertCircle } from "lucide-react";
 import { cn } from "@/utils/cn";
+import PropTypes from "prop-types";
 
 export const SavedExercises = ({ maxItems = 4 }) => {
     const { savedExercises, removeSavedExercise, removeAllSavedExercises, isLoading } = useSavedExercises();
@@ -64,7 +65,7 @@ export const SavedExercises = ({ maxItems = 4 }) => {
             <div className="rounded-xl bg-white p-6">
                 <h2 className="mb-4 text-xl font-bold">Saved Exercises</h2>
                 <div className="flex flex-col items-center justify-center rounded-lg bg-slate-50 p-6 text-center">
-                    <p className="text-slate-600">You haven't saved any exercises yet.</p>
+                    <p className="text-slate-600">You haven&apos;t saved any exercises yet.</p>
                     <Link to="/library" className="mt-3 text-sm font-medium text-[#1e628c] hover:underline">
                         Explore exercise library
                     </Link>
@@ -310,4 +311,8 @@ export const SavedExercises = ({ maxItems = 4 }) => {
             )}
         </div>
     );
+};
+
+SavedExercises.propTypes = {
+    maxItems: PropTypes.number,
 };

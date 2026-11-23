@@ -79,14 +79,10 @@ body {
 
 .outgoing .avatar {
   order: 2;
-  background: url("images/logo.jpg");
-  background-size: cover;
 }
 
 .incoming .avatar {
   order: 1;
-  background: url("images/logo.svg");
-  background-size: cover;
 }
 
 .text {

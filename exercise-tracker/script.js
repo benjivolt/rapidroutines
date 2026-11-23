@@ -17,13 +17,14 @@ window.onload = function() {
   const [month, day, year] = estDate.split('/');
   const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   document.getElementById('date').value = formattedDate;
-  window.parent.postMessage({ type: "checkAuth" }, "*");
+  window.parent.postMessage({ type: "checkAuth" }, window.location.origin);
   window.addEventListener("message", (event) => {
+    if (event.origin !== window.location.origin || event.source !== window.parent || !event.data) return;
     if (event.data.type === "authStatus") {
       isAuthenticated = event.data.isAuthenticated;
       userId = event.data.userId || null;
       if (isAuthenticated) {
-        window.parent.postMessage({ type: "getTrackerExercises" }, "*");
+        window.parent.postMessage({ type: "getTrackerExercises" }, window.location.origin);
       } else {
         exercisesData = [];
         displayAllExercises();
@@ -90,12 +91,12 @@ function addExercise() {
     window.parent.postMessage({ 
       type: "saveTrackerExercise", 
       exercise: newExercise 
-    }, "*");
+    }, window.location.origin);
   } else {
     exercisesData.push(newExercise);
     window.parent.postMessage({ 
       type: "exerciseNotAuthenticated" 
-    }, "*");
+    }, window.location.origin);
   }
   displayExercise(newExercise);
   document.getElementById('sets').value = '';
@@ -176,6 +177,6 @@ function deleteExercise(exerciseData) {
     window.parent.postMessage({
       type: "removeTrackerExercise",
       exerciseId: exerciseData.id
-    }, "*");
+    }, window.location.origin);
   }
 }

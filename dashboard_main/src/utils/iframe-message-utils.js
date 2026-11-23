@@ -1,7 +1,6 @@
 
 export const sendMessageToIframe = (iframe, messageType, data = {}) => {
   if (!iframe || !iframe.contentWindow) {
-    console.warn('No valid iframe provided to send message to');
     return false;
   }
   
@@ -9,7 +8,7 @@ export const sendMessageToIframe = (iframe, messageType, data = {}) => {
     iframe.contentWindow.postMessage({
       type: messageType,
       ...data
-    }, '*');  
+    }, window.location.origin);
     return true;
   } catch (error) {
     console.error('Error sending message to iframe:', error);
@@ -40,7 +39,6 @@ export const createIframeMessageHandler = (allowedOrigins, handlers) => {
 
 export const loadChatHistory = async (iframe, messages) => {
   if (!iframe || !iframe.contentWindow || !Array.isArray(messages)) {
-    console.warn('Invalid parameters for loading chat history');
     return false;
   }
   

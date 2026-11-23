@@ -76,16 +76,3 @@
         @apply w-fit whitespace-nowrap p-4 font-medium;
     }
 }
-
-.recharts-default-tooltip {
-    @apply !rounded-lg !border !border-slate-300 !bg-white;
-}
-
-.recharts-tooltip-label {
-    @apply text-base font-medium text-slate-900;
-}
-
-.recharts-tooltip-item {
-    @apply text-base font-medium !text-[#1e628c];
-}
-

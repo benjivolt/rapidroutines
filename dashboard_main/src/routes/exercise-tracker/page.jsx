@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Footer } from "@/layouts/footer";
 import { useAuth } from "@/contexts/auth-context";
 import axios from "axios";
 
-const ExerciseTrackerPage = ({ limited = false }) => {
+const ExerciseTrackerPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { isAuthenticated, user } = useAuth();
   const [trackerExercises, setTrackerExercises] = useState([]);
@@ -22,10 +22,12 @@ const ExerciseTrackerPage = ({ limited = false }) => {
       if (userData.trackerExercises) {
         setTrackerExercises(userData.trackerExercises);
       }
-    } catch (error) {}
+    } catch (error) {
+      console.error("Error loading tracker exercises:", error);
+    }
   };
 
-  const saveExerciseToServer = async (exercise) => {
+  const saveExerciseToServer = useCallback(async (exercise) => {
     try {
       const updatedExercises = [...trackerExercises, exercise];
       setTrackerExercises(updatedExercises);
@@ -34,12 +36,12 @@ const ExerciseTrackerPage = ({ limited = false }) => {
         data: updatedExercises,
       });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
-  };
+  }, [trackerExercises]);
 
-  const removeExerciseFromServer = async (exerciseId) => {
+  const removeExerciseFromServer = useCallback(async (exerciseId) => {
     try {
       const updatedExercises = trackerExercises.filter((ex) => ex.id !== exerciseId);
       setTrackerExercises(updatedExercises);
@@ -48,10 +50,10 @@ const ExerciseTrackerPage = ({ limited = false }) => {
         data: updatedExercises,
       });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
-  };
+  }, [trackerExercises]);
 
   const showNotification = (type, message) => {
     setNotification({ type, message });
@@ -76,7 +78,7 @@ const ExerciseTrackerPage = ({ limited = false }) => {
                   isAuthenticated: isAuthenticated,
                   userId: user?.id || null,
                 },
-                "*"
+                window.location.origin
               );
             }
             break;
@@ -89,7 +91,7 @@ const ExerciseTrackerPage = ({ limited = false }) => {
                   type: "trackerExercisesData",
                   exercises: trackerExercises,
                 },
-                "*"
+                window.location.origin
               );
             }
             break;
@@ -114,7 +116,7 @@ const ExerciseTrackerPage = ({ limited = false }) => {
     return () => {
       window.removeEventListener("message", messageHandler);
     };
-  }, [isAuthenticated, user, trackerExercises]);
+  }, [isAuthenticated, user, trackerExercises, saveExerciseToServer, removeExerciseFromServer]);
 
   return (
     <div className="flex flex-col min-h-screen">

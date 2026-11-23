@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MessageSquare, ChevronRight, Sparkles, Trash2, XCircle, AlertCircle } from "lucide-react";
 import { useChatbot } from "@/contexts/chatbot-context";
+import PropTypes from "prop-types";
 
 export const RecentChatbotChats = ({ maxItems = 2 }) => {
     const { getChatHistory, deleteChatSession, deleteAllChatSessions, isLoading } = useChatbot();
@@ -67,7 +68,7 @@ export const RecentChatbotChats = ({ maxItems = 2 }) => {
             <div className="rounded-xl bg-white p-6 shadow-md">
                 <h2 className="mb-4 text-xl font-bold">Recent Chatbot Chats</h2>
                 <div className="flex flex-col items-center justify-center rounded-lg bg-slate-50 p-6 text-center">
-                    <p className="text-slate-600">You haven't had any chats with the AI assistant yet.</p>
+                    <p className="text-slate-600">You haven&apos;t had any chats with the AI assistant yet.</p>
                     <Link to="/chatbot" className="mt-3 text-sm font-medium text-[#1e628c] hover:underline">
                         Start a new conversation
                     </Link>
@@ -208,4 +209,8 @@ export const RecentChatbotChats = ({ maxItems = 2 }) => {
             </div>
         </div>
     );
+};
+
+RecentChatbotChats.propTypes = {
+    maxItems: PropTypes.number,
 };
