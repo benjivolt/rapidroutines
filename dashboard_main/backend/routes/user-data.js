@@ -12,7 +12,8 @@ router.post('/save-data', dataLimiter, auth, async (req, res) => {
   if (!dataType || !data) {
     return res.status(400).json({ message: 'Data type and content are required' });
   }
-  if (!DATA_TYPES.includes(dataType)) {
+  const field = DATA_TYPES.find((allowed) => allowed === dataType);
+  if (!field) {
     return res.status(400).json({ message: 'Invalid data type' });
   }
 
@@ -22,7 +23,7 @@ router.post('/save-data', dataLimiter, auth, async (req, res) => {
     }
     const updatedUserData = await UserData.findOneAndUpdate(
       { user: req.user.id },
-      { [dataType]: data, $setOnInsert: { user: req.user.id }, updatedAt: Date.now() },
+      { $set: { [field]: data, updatedAt: Date.now() }, $setOnInsert: { user: req.user.id } },
       { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true, context: 'query' },
     );
     res.json({ message: 'Data saved successfully', data: updatedUserData });

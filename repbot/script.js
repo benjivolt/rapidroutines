@@ -13,7 +13,8 @@ class ExerciseCounter {
         this.stage = "down";
         this.camera = null;
         
-        this.sessionId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+        this.sessionId = 'user_' + Array.from(crypto.getRandomValues(new Uint8Array(16)),
+            (byte) => byte.toString(16).padStart(2, '0')).join('');
         
         this.backendUrl = "";
 

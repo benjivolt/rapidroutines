@@ -65,7 +65,7 @@ Render deploys from `render.yaml` at the repository root. The build command is `
 ## Security
 
 - Sign-in uses JWTs that expire after 7 days. Each user has a token version stored on the server, and signing out, resetting the password or changing the email address increments it, so older tokens stop working. Passwords are hashed with bcrypt.
-- Sign-in, sign-up, password reset, contact, chatbot, RepBot and saved-data requests are rate limited per IP address.
+- All routes have a coarse per-IP cap of 3,000 requests per minute. Sign-in, sign-up, password reset, contact, chatbot, RepBot and saved-data requests are rate limited per IP address.
 - Helmet sets a Content Security Policy and the usual security headers. Pages can only be framed by the site itself, and a Permissions-Policy allows the camera only on the site's own pages.
 - Request bodies are capped at 300 KB, and each user's saved data at 256 KB. The server checks the length and format of names, emails, passwords, chat messages and contact form fields.
 - The server returns 404 for dotfiles and for private paths such as `dashboard_main/`, `node_modules/`, `package.json` and this README.

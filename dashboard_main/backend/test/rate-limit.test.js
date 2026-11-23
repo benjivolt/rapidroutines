@@ -26,6 +26,18 @@ describe('login rate limit', () => {
   });
 });
 
+describe('site-wide request ceiling', () => {
+  it('also bounds repeated requests to public endpoints', async () => {
+    const headers = { 'X-Forwarded-For': '203.0.113.222' };
+    for (let i = 0; i < 3000; i += 1) {
+      assert.equal((await request(app).get('/api').set(headers)).status, 200);
+    }
+    const blocked = await request(app).get('/api').set(headers);
+    assert.equal(blocked.status, 429);
+    assert.match(blocked.body.message, /Too many requests/);
+  });
+});
+
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 const { PASSWORD } = require('./helpers');

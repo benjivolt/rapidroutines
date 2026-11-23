@@ -352,7 +352,7 @@ let epGlobals = {};
         epLoadMore();
     }
 
-    // Content protection system function 
+    // Content protection system function
     const unlockSubmitHander = (perentSel, that) => {
         var ep_client_id = jQuery(that).closest('form').find('input[name="ep_client_id"]').val();
         var password = jQuery(`input[name="pass_${ep_client_id}"]`).val();
@@ -436,7 +436,20 @@ let epGlobals = {};
     // Get the insta-gallery container element
     const getPopupTemplate = (instPost, hashtag = '', accountType) => {
 
-        let instaPostData = JSON.parse(instPost);
+        const instaPostData = JSON.parse(instPost);
+        const escapeHtml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const safeWebUrl = (value) => {
+            try {
+                const url = new URL(value, window.location.origin);
+                return ['https:', 'http:'].includes(url.protocol) ? url.href : '';
+            } catch {
+                return '';
+            }
+        };
+        const htmlUrl = (value) => escapeHtml(safeWebUrl(value));
+        const shareUrl = encodeURIComponent(safeWebUrl(instaPostData.permalink));
 
 
         let likeIcon = '<svg aria-label="Like" class="x1lliihq x1n2onr6" color="#262626" fill="#262626" height="24" viewBox="0 0 24 24" width="24"><path d="M16.792 3.904A4.989 4.989 0 0 1 21.5 9.122c0 3.072-2.652 4.959-5.197 7.222-2.512 2.243-3.865 3.469-4.303 3.752-.477-.309-2.143-1.823-4.303-3.752C5.141 14.072 2.5 12.167 2.5 9.122a4.989 4.989 0 0 1 4.708-5.218 4.21 4.21 0 0 1 3.675 1.941c.84 1.175.98 1.763 1.12 1.763s.278-.588 1.11-1.766a4.17 4.17 0 0 1 3.679-1.938m0-2a6.04 6.04 0 0 0-4.797 2.127 6.052 6.052 0 0 0-4.787-2.127A6.985 6.985 0 0 0 .5 9.122c0 3.61 2.55 5.827 5.015 7.97.283.246.569.494.853.747l1.027.918a44.998 44.998 0 0 0 3.518 3.018 2 2 0 0 0 2.174 0 45.263 45.263 0 0 0 3.626-3.115l.922-.824c.293-.26.59-.519.885-.774 2.334-2.025 4.98-4.32 4.98-7.94a6.985 6.985 0 0 0-6.708-7.218Z"/></svg>';
@@ -453,35 +466,23 @@ let epGlobals = {};
 
 
 
-        const instaUserInfo = instPost.user_info;
-
-        let getDate = new Date(instaPostData.timestamp);
-        getDate = getDate.toLocaleString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-
-        let getTime = new Date(instaPostData.timestamp);
-        getTime = getTime.toLocaleString('en-US', { hour12: false, hour: 'numeric', minute: 'numeric', second: 'numeric' });
-
-        let captionText = instaPostData.caption ? instaPostData.caption : '';
-        const tagRegex = /(#\w+)/g;
-
-        const wrapTag = (match) => {
-            const tag = match.substring(1); // Remove the '#' character
-            const tagUrl = `https://www.instagram.com/explore/tags/${tag}`;
-            return `<span class="tag-wrapper"><a target="_blank" href="${tagUrl}">${match}</a></span>`;
-        };
-
-        captionText = captionText.replace(tagRegex, wrapTag);
+        // Escape the caption before adding links for hashtag words.
+        let captionText = escapeHtml(instaPostData.caption);
+        captionText = captionText.replace(/(^|[\s(])(#\w+)/g, (match, prefix, hashtagWord) => {
+            const tag = encodeURIComponent(hashtagWord.substring(1));
+            return `${prefix}<span class="tag-wrapper"><a target="_blank" rel="noopener noreferrer" href="https://www.instagram.com/explore/tags/${tag}">${hashtagWord}</a></span>`;
+        });
 
         let carouselTemplate = '';
         if (instaPostData.media_type === 'CAROUSEL_ALBUM') {
             carouselTemplate += `<div class="popup-carousel"><div class="cg-carousel__track js-carousel__track">`;
 
-            instaPostData.children.data?.map((item) => {
+            instaPostData.children?.data?.forEach((item) => {
                 if (item.media_type?.toLowerCase() === 'video') {
-                    carouselTemplate += `<video width="630" class="popup-media-image cg-carousel__slide js-carousel__slide" controls src="${item.media_url || ''}" alt="${item.caption || ''}" controlsList="nodownload"></video>`;
+                    carouselTemplate += `<video width="630" class="popup-media-image cg-carousel__slide js-carousel__slide" controls src="${htmlUrl(item.media_url)}" alt="${escapeHtml(item.caption)}" controlsList="nodownload"></video>`;
                 }
                 else {
-                    carouselTemplate += `<img width="630" class="popup-media-image cg-carousel__slide js-carousel__slide" src="${item.media_url || ''}" alt="${item.caption || ''}" />`;
+                    carouselTemplate += `<img width="630" class="popup-media-image cg-carousel__slide js-carousel__slide" src="${htmlUrl(item.media_url)}" alt="${escapeHtml(item.caption)}" />`;
                 }
             });
 
@@ -495,18 +496,18 @@ let epGlobals = {};
         }
         else {
             if (instaPostData.media_type?.toLowerCase() === 'video') {
-                carouselTemplate += `<video width="630" class="popup-media-image" controls src="${instaPostData.media_url || ''}" alt="${instaPostData.caption || ''}"></video>`;
+                carouselTemplate += `<video width="630" class="popup-media-image" controls src="${htmlUrl(instaPostData.media_url)}" alt="${escapeHtml(instaPostData.caption)}"></video>`;
             }
             else {
-                carouselTemplate += `<img width="630" class="popup-media-image" src="${instaPostData.media_url || ''}" alt="${instaPostData.caption || ''}" />`;
+                carouselTemplate += `<img width="630" class="popup-media-image" src="${htmlUrl(instaPostData.media_url)}" alt="${escapeHtml(instaPostData.caption)}" />`;
             }
         }
 
-        let srcUrl = `https://www.instagram.com/${instaPostData.username}/`;
+        let srcUrl = `https://www.instagram.com/${encodeURIComponent(instaPostData.username)}/`;
 
         if (hashtag) {
             instaPostData.username = '#' + hashtag;
-            srcUrl = `https://www.instagram.com/explore/tags/${hashtag}/`;
+            srcUrl = `https://www.instagram.com/explore/tags/${encodeURIComponent(hashtag)}/`;
         }
 
 
@@ -515,12 +516,12 @@ let epGlobals = {};
         if (eplocalize.is_pro_plugin_active && accountType === 'business') {
             if (instaPostData.show_likes_count == 'true') {
                 likeComments += `
-                    <div class="embedpress-inline popup-like-button"><a target="_blank" href="${instaPostData.permalink}">${likeIcon} ${instaPostData.like_count || 0}</a></div> 
+                    <div class="embedpress-inline popup-like-button"><a target="_blank" href="${htmlUrl(instaPostData.permalink)}">${likeIcon} ${escapeHtml(instaPostData.like_count || 0)}</a></div>
                 `;
             }
             if (instaPostData.show_comments_count == 'true') {
                 likeComments += `
-                    <div class="embedpress-inline"><a target="_blank" href="${instaPostData.permalink}">${commentsIcon} ${instaPostData.comments_count || 0}</a></div>
+                    <div class="embedpress-inline"><a target="_blank" href="${htmlUrl(instaPostData.permalink)}">${commentsIcon} ${escapeHtml(instaPostData.comments_count || 0)}</a></div>
                 `;
             }
         }
@@ -532,7 +533,7 @@ let epGlobals = {};
         }
         if (instaPostData.popup_follow_button == 'true' || instaPostData.popup_follow_button == 'yes') {
             followBtn = `<div class="insta-followbtn">
-                <a target="_new" href="${srcUrl}" type="button" class="btn btn-primary">${instaPostData.popup_follow_button_text}</a>
+                <a target="_new" href="${htmlUrl(srcUrl)}" type="button" class="btn btn-primary">${escapeHtml(instaPostData.popup_follow_button_text)}</a>
             </div>`;
         }
 
@@ -540,16 +541,16 @@ let epGlobals = {};
         popupHtml += `
         <div class="popup-container">
                 <div class="popup-md-9 white">
-                    <div class="embedpress-popup-block embedpress-popup-img" id="post-${instaPostData.id}">
+                    <div class="embedpress-popup-block embedpress-popup-img" id="post-${escapeHtml(instaPostData.id)}">
                         ${carouselTemplate}
                     </div>
                 </div>
                 <div class="popup-md-3 red">
                     <div class="embedpress-popup-block embedpress-popup-info">
                         <div class="embedpress-popup-header">
-                            <div class="embedpress-popup-header-img"> <a target="_blank" href="${srcUrl}"
+                            <div class="embedpress-popup-header-img"> <a target="_blank" href="${htmlUrl(srcUrl)}"
                                     target="_blank" class="embedpress-href">
-                                     <img decoding="async" loading="lazy" class="embedpress-popup-round" src="${instaPostData.profile_picture_url}" width="30" height="30"> <span class="embedpress-popup-username">${instaPostData.username}</span>
+                                     <img decoding="async" loading="lazy" class="embedpress-popup-round" src="${htmlUrl(instaPostData.profile_picture_url)}" width="30" height="30"> <span class="embedpress-popup-username">${escapeHtml(instaPostData.username)}</span>
                                 </a>
                             </div>
                             ${followBtn}
@@ -559,22 +560,22 @@ let epGlobals = {};
                             ${likeComments}
                                 <div class="embedpress-inline">
                                 <div class="embedpress-popup-share-buttons"> <a
-                                        href="https://www.facebook.com/sharer/sharer.php?u=${instaPostData.permalink}" target="_blank">
+                                        href="https://www.facebook.com/sharer/sharer.php?u=${shareUrl}" target="_blank">
                                         <span class="dashicons dashicons-facebook"></span></a> <a
-                                        href="https://twitter.com/intent/tweet?url=${instaPostData.permalink}"
+                                        href="https://twitter.com/intent/tweet?url=${shareUrl}"
                                         target="_blank"><span>
                                         <svg viewBox="0 0 18 18" aria-hidden="true" class="r-4qtqp9 r-yyyyoo r-dnmrzs r-bnwqim r-1plcrui r-lrvibr r-lrsllp r-18jsvk2 r-16y2uox r-8kz0gk" width="18" height="18"><path d="M13.683 1.688h2.481l-5.42 6.195 6.377 8.43h-4.993L8.217 11.2l-4.474 5.113H1.26l5.798-6.626L.941 1.688H6.06l3.535 4.673zm-.871 13.14h1.375L5.313 3.095H3.838z"/></svg>
-                                        </span></a>                                       
-                                        <a href="https://www.linkedin.com/shareArticle?mini=true&amp;url=${instaPostData.permalink}"
+                                        </span></a>
+                                        <a href="https://www.linkedin.com/shareArticle?mini=true&amp;url=${shareUrl}"
                                         target="_blank"><span class="dashicons dashicons-linkedin"></span></a> <a
-                                        href="https://pinterest.com/pin/create/button/?url=${instaPostData.permalink}"
+                                        href="https://pinterest.com/pin/create/button/?url=${shareUrl}"
                                         target="_blank"><span class="dashicons dashicons-pinterest"></span></a></div>
                                 <div class="embedpress-href embedpress-popup-share">${shareIcon}</div>
                             </div><div class="embedpress-inline embedpress-popup-instagram-buttons"><a
-                                    href="${instaPostData.permalink}" target="_blank"
+                                    href="${htmlUrl(instaPostData.permalink)}" target="_blank"
                                     class="embedpress-href">${instaIcon}</a></div>
                         </div>
-                        
+
                     </div>
                 </div>
             </div>
@@ -1047,7 +1048,7 @@ jQuery(window).on("elementor/frontend/init", function () {
             epElLoadMore();
         }
 
-        // Content protection system function 
+        // Content protection system function
         const unlockElSubmitHander = (perentSel, that) => {
             var ep_client_id = jQuery(that).closest('form').find('input[name="ep_client_id"]').val();
             var password = jQuery(`input[name="pass_${ep_client_id}"]`).val();

@@ -4,6 +4,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const compression = require('compression');
+const { rateLimit } = require('express-rate-limit');
 
 const authRoutes = require('./routes/auth');
 const userDataRoutes = require('./routes/user-data');
@@ -24,6 +25,16 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'https://rapidroutines.org,h
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 2));
+
+// Keep a coarse request ceiling on public/static routes as well as the narrower API limits.
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  limit: 3000,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: 'Too many requests. Try again in a minute.' },
+  skip: () => process.env.NODE_ENV === 'test' && process.env.RATE_LIMIT_IN_TESTS !== 'true',
+}));
 
 app.use(
   helmet({

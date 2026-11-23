@@ -203,16 +203,23 @@
                         $words.each(function ()
                         {
                             var word = $(this),
-                                letters = word.text().trim().split(''),
+                                letters = Array.from(word.text().trim()),
                                 selected = word.hasClass('is-visible');
-
+                            var fragment = document.createDocumentFragment();
                             for (var i = 0; i < letters.length; i++)
                             {
-                                if (word.parents('.rotate-2').length > 0) { letters[i] = '<em>' + letters[i] + '</em>'; }
-                                letters[i] = (selected) ? '<i class="in">' + letters[i] + '</i>' : '<i>' + letters[i] + '</i>';
+                                var letter = document.createElement('i');
+                                if (selected) letter.className = 'in';
+                                if (word.parents('.rotate-2').length > 0) {
+                                    var emphasis = document.createElement('em');
+                                    emphasis.textContent = letters[i];
+                                    letter.appendChild(emphasis);
+                                } else {
+                                    letter.textContent = letters[i];
+                                }
+                                fragment.appendChild(letter);
                             }
-                            var newLetters = letters.join('');
-                            word.html(newLetters).css('opacity', 1);
+                            word.empty().append(fragment).css('opacity', 1);
                         });
                     }
 
