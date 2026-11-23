@@ -75,4 +75,4 @@ Render deploys from `render.yaml` at the repository root. The build command is `
 
 ## Contributors
 
-Built by [Ben G](https://github.com/bgcalisthenics) and the RapidRoutines team, with contributions from Jaip1019.
+Built by [Ben G](https://github.com/benjivolt) and the RapidRoutines team, with contributions from Jaip1019.
