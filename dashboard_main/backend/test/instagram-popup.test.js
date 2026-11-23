@@ -39,7 +39,7 @@ const post = {
 test('Instagram popup preserves media, captions, hashtag links and encoded sharing URLs', () => {
   const html = renderPost(post);
   assert.ok(html.includes('src="https://images.example/workout.jpg"'));
-  assert.ok(html.includes('https://www.instagram.com/explore/tags/fitness'));
+  assert.equal(html.match(/class="tag-wrapper"><a[^>]*href="([^"]+)"/)?.[1], 'https://www.instagram.com/explore/tags/fitness');
   assert.ok(html.includes('A workout '));
   assert.ok(html.includes('u=https%3A%2F%2Fwww.instagram.com%2Fp%2F123%2F%3Fa%3D1%26b%3D2'));
 });

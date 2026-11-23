@@ -28,7 +28,7 @@ router.post('/save-data', dataLimiter, auth, async (req, res) => {
     );
     res.json({ message: 'Data saved successfully', data: updatedUserData });
   } catch (err) {
-    console.error(`Saving ${dataType} failed:`, err.message);
+    console.error('Saving user data failed: %s', err.message);
     res.status(500).json({ message: 'Could not save your data.' });
   }
 });
