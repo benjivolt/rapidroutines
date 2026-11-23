@@ -3,12 +3,27 @@ updates:
   - package-ecosystem: npm
     directory: /dashboard_main/backend
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      backend:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /dashboard_main
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      dashboard:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
