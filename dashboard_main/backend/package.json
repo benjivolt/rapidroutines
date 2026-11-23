@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "migrate:chatbot-kb": "node scripts/migrateChatbotKnowledge.js",
-    "test": "node --test test/"
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
