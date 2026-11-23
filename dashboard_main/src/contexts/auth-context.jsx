@@ -77,32 +77,9 @@ export const AuthProvider = ({ children }) => {
     
             return { success: false, message: "Login failed" };
         } catch (err) {
-            let errorType = "unknown";
-            let errorMessage = err.response?.data?.message || "Login failed";
-    
-            if (err.response?.status === 400) {
-                if (err.response?.data?.details?.field === "email") {
-                    errorType = "user_not_found";
-                errorMessage = "Account not found.";
-                } else if (err.response?.data?.details?.field === "password") {
-                    errorType = "invalid_password";
-                    errorMessage = "Incorrect password. Please try again.";
-                }
-            }
-    
-            console.log("Login error:", { 
-                errorType, 
-                errorMessage, 
-                details: err.response?.data?.details 
-            });
-    
+            const errorMessage = err.response?.data?.message || "Could not sign in. Try again.";
             setError(errorMessage);
-    
-            return { 
-                success: false, 
-                message: errorMessage,
-                errorType: errorType
-            };
+            return { success: false, message: errorMessage };
         } finally {
             setIsLoading(false);
         }
@@ -138,7 +115,11 @@ export const AuthProvider = ({ children }) => {
             setIsLoading(true);
             
             const res = await axios.put("/api/auth/update-profile", userData);
-            
+
+            if (res.data?.token) {
+                localStorage.setItem("token", res.data.token);
+                axios.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
+            }
             if (res.data?.user) {
                 setUser(res.data.user);
                 return true;
@@ -146,8 +127,9 @@ export const AuthProvider = ({ children }) => {
             
             return false;
         } catch (err) {
-            setError(err.response?.data?.message || "Profile update failed");
-            return false;
+            const message = err.response?.data?.message || "Could not update your profile";
+            setError(message);
+            return message;
         } finally {
             setIsLoading(false);
         }
@@ -183,12 +165,12 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const deleteAccount = async () => {
+    const deleteAccount = async (currentPassword) => {
         try {
             setError(null);
             setIsLoading(true);
             
-            const res = await axios.delete("/api/auth/delete-account");
+            const res = await axios.delete("/api/auth/delete-account", { data: { currentPassword } });
             
             if (res.status === 200) {
                 localStorage.removeItem("savedExercises_data");
@@ -203,14 +185,19 @@ export const AuthProvider = ({ children }) => {
             
             return false;
         } catch (err) {
-            setError(err.response?.data?.message || "Account deletion failed");
-            return false;
+            const message = err.response?.data?.message || "Could not delete your account";
+            setError(message);
+            return message;
         } finally {
             setIsLoading(false);
         }
     };
 
     const logout = () => {
+        const token = localStorage.getItem("token");
+        if (token) {
+            axios.post("/api/auth/logout", null, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
+        }
         localStorage.removeItem("token");
         delete axios.defaults.headers.common["Authorization"];
         setUser(null);

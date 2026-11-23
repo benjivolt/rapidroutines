@@ -9,7 +9,7 @@ import { ChatbotProvider } from '@/contexts/chatbot-context'
 import { SavedExercisesProvider } from '@/contexts/saved-exercises-context'
 import { RapidTreeProvider } from '@/contexts/rapidtree-context'
 
-const RootProvider = ({ children }) => (
+createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeProvider>
       <AuthProvider>
@@ -17,7 +17,7 @@ const RootProvider = ({ children }) => (
           <ExerciseProvider>
             <ChatbotProvider>
               <RapidTreeProvider>
-                {children}
+                <App />
               </RapidTreeProvider>
             </ChatbotProvider>
           </ExerciseProvider>
@@ -25,10 +25,4 @@ const RootProvider = ({ children }) => (
       </AuthProvider>
     </ThemeProvider>
   </StrictMode>
-)
-
-createRoot(document.getElementById('root')).render(
-  <RootProvider>
-    <App />
-  </RootProvider>
 )

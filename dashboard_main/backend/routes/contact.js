@@ -1,14 +1,22 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
+const { contactLimiter } = require('../lib/rate-limit');
 
 const router = express.Router();
 const DEFAULT_TO_EMAIL = 'support@rapidroutines.org';
 
 function normalizeInput(body) {
   return {
-    name: String(body?.name || '').trim(),
-    email: String(body?.email || '').trim(),
-    message: String(body?.message || '').trim(),
+    name: String(body?.name || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 100),
+    email: String(body?.email || '')
+      .trim()
+      .slice(0, 254),
+    message: String(body?.message || '')
+      .trim()
+      .slice(0, 5000),
   };
 }
 
@@ -19,9 +27,7 @@ function isValidEmail(email) {
 function createZohoTransporter() {
   const host = process.env.ZOHO_SMTP_HOST || 'smtp.zoho.com';
   const port = Number(process.env.ZOHO_SMTP_PORT || 465);
-  const secure = process.env.ZOHO_SMTP_SECURE
-    ? process.env.ZOHO_SMTP_SECURE === 'true'
-    : port === 465;
+  const secure = process.env.ZOHO_SMTP_SECURE ? process.env.ZOHO_SMTP_SECURE === 'true' : port === 465;
   const user = process.env.ZOHO_SMTP_USER;
   const pass = process.env.ZOHO_SMTP_PASS;
 
@@ -34,10 +40,13 @@ function createZohoTransporter() {
     port,
     secure,
     auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
 }
 
-router.post('/', async (req, res) => {
+router.post('/', contactLimiter, async (req, res) => {
   try {
     const data = normalizeInput(req.body);
     if (!data.name || !data.email || !data.message) {
@@ -62,7 +71,7 @@ router.post('/', async (req, res) => {
 
     return res.status(200).json({ message: 'Message sent successfully.' });
   } catch (error) {
-    console.error('Contact form send error:', error);
+    console.error('Contact form send error:', error.message);
     return res.status(500).json({ message: 'Unable to send message right now.' });
   }
 });

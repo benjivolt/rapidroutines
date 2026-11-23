@@ -4,7 +4,6 @@ import { X, CheckCircle, Lock, RefreshCw } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useRapidTree } from "@/contexts/rapidtree-context";
 import { useAuth } from "@/contexts/auth-context";
-import PropTypes from "prop-types";
 
 const initializeExerciseCategories = () => {
   const categories = {
@@ -122,7 +121,7 @@ const initializeExerciseCategories = () => {
   return categories;
 };
 
-const RapidTreePage = ({ limited = false }) => {
+const RapidTreePage = () => {
   const [activeCategory, setActiveCategory] = useState("push");
   const [exercises, setExercises] = useState(initializeExerciseCategories());
   const [selectedExercise, setSelectedExercise] = useState(null);
@@ -183,7 +182,7 @@ const RapidTreePage = ({ limited = false }) => {
           }
         });
         setExercises(updatedExercises);
-      } catch (error) {
+      } catch {
         setExercises(initializeExerciseCategories());
       }
     };
@@ -444,7 +443,6 @@ const RapidTreePage = ({ limited = false }) => {
       abWheel: ["Start on knees", "Slight arch in lower back", "Roll out only as far as controllable"],
       dragonFlag: ["Support upper body", "Keep body rigid", "Lower with control"],
       backLever: ["Start with tuck position", "Keep arms straight", "Maintain body tension"],
-      frontLever: ["Begin with tuck", "Pull shoulder blades together", "Straighten body gradually"],
       vSit: ["Press hands down", "Lean back slightly", "Lift legs higher than L-sit"],
       manna: ["Master L-sit first", "Lean forward", "Press strongly with straight arms"],
       neckRotation: ["Move slowly", "Avoid pain", "Breathe deeply"],
@@ -649,10 +647,6 @@ const RapidTreePage = ({ limited = false }) => {
       </div>
     </div>
   );
-};
-
-RapidTreePage.propTypes = {
-  limited: PropTypes.bool
 };
 
 export default RapidTreePage;

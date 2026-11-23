@@ -77,7 +77,7 @@ class ExerciseCounter {
 
     initialize_pose() {
         this.pose = new Pose({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${file}`
         });
 
         this.pose.setOptions({
@@ -134,10 +134,7 @@ class ExerciseCounter {
     show_camera_error(message) {
         const errorElement = document.createElement('div');
         errorElement.className = 'camera-error';
-        errorElement.innerHTML = `
-            <p>Camera Error: ${message}</p>
-            <p>Please ensure you've granted camera permissions and try again.</p>
-        `;
+        errorElement.textContent = `Camera error: ${message}. Allow camera access and try again.`;
         this.exerciseContainer.appendChild(errorElement);
 
         setTimeout(() => {

@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: rapidroutines
+    runtime: node
+    plan: free
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ZOHO_SMTP_USER
+        sync: false
+      - key: ZOHO_SMTP_PASS
+        sync: false
+      - key: FRONTEND_URL
+        value: https://rapidroutines.org

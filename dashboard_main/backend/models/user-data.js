@@ -1,47 +1,21 @@
 const mongoose = require('mongoose');
 
+const { Mixed, ObjectId } = mongoose.Schema.Types;
+
 const UserDataSchema = new mongoose.Schema({
-    user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-        unique: true
-    },
-    savedExercises: {
-        type: [mongoose.Schema.Types.Mixed],
-        default: []
-    },
-    exerciseLog: {
-        type: [mongoose.Schema.Types.Mixed],
-        default: []
-    },
-    chatHistory: {
-        type: [mongoose.Schema.Types.Mixed],
-        default: []
-    },
-    rapidTreeProgress: {
-        type: mongoose.Schema.Types.Mixed,
-        default: {}
-    },
-    // Add new field for tracker exercises
-    trackerExercises: {
-        type: [mongoose.Schema.Types.Mixed],
-        default: []
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now
-    }
+  user: { type: ObjectId, ref: 'User', required: true, unique: true },
+  savedExercises: { type: [Mixed], default: [] },
+  exerciseLog: { type: [Mixed], default: [] },
+  chatHistory: { type: [Mixed], default: [] },
+  rapidTreeProgress: { type: Mixed, default: {} },
+  trackerExercises: { type: [Mixed], default: [] },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
 });
 
-// Update the 'updatedAt' timestamp on save
-UserDataSchema.pre('save', function(next) {
-    this.updatedAt = Date.now();
-    next();
+UserDataSchema.pre('save', function touch(next) {
+  this.updatedAt = Date.now();
+  next();
 });
 
 module.exports = mongoose.model('UserData', UserDataSchema);

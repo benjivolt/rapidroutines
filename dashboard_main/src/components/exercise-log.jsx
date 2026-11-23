@@ -3,6 +3,7 @@ import { DumbbellIcon, Calendar, Trash2, XCircle, AlertCircle } from "lucide-rea
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { Link } from "react-router-dom";
+import PropTypes from "prop-types";
 
 export const ExerciseLog = ({ maxItems = 5, limited = false }) => {
     const { getExercises, deleteExercisesByIds, deleteAllExercises, isLoading } = useExercises();
@@ -329,4 +330,9 @@ export const ExerciseLog = ({ maxItems = 5, limited = false }) => {
             )}
         </div>
     );
+};
+
+ExerciseLog.propTypes = {
+    maxItems: PropTypes.number,
+    limited: PropTypes.bool,
 };

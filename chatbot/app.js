@@ -16,7 +16,7 @@ function notifyParentWindow(role, content) {
         type: "chatMessage",
         role: role,
         content: content
-      }, "*");
+      }, window.location.origin);
     }
   } catch (e) {
     console.error("Error sending message to parent window:", e);
@@ -28,7 +28,7 @@ function notifyChatEnd() {
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({
         type: "chatEnded"
-      }, "*");
+      }, window.location.origin);
     }
   } catch (e) {
     console.error("Error sending chat end notification:", e);
@@ -42,7 +42,6 @@ function loadMessage(role, content) {
     const messageId = `${role}-${content}`;
     
     if (window.chatApp.loadedMessages.has(messageId)) {
-      console.log("Skipping duplicate message:", messageId);
       return;
     }
     
@@ -99,8 +98,8 @@ window.addEventListener('beforeunload', function() {
 
 window.addEventListener('message', function(event) {
   try {
-    if (event.data && event.data.type === "loadMessage" && event.data.role && event.data.content) {
-      console.log("Received load message request:", event.data);
+    if (event.origin !== window.location.origin || event.source !== window.parent || window.parent === window) return;
+    if (event.data && event.data.type === "loadMessage" && ["user", "assistant"].includes(event.data.role) && typeof event.data.content === "string") {
       loadMessage(event.data.role, event.data.content);
     }
   } catch (e) {
@@ -217,7 +216,6 @@ function displayWelcomeMessage() {
     
     notifyParentWindow("assistant", welcomeMessage);
     
-    // Store welcome message in context properly
     window.chatApp.context.push({ role: "assistant", content: welcomeMessage });
   } else {
     console.error("Chat container not found");
@@ -270,7 +268,7 @@ function initializeApp() {
       try {
         window.parent.postMessage({
           type: "iframeReady"
-        }, "*");
+        }, window.location.origin);
       } catch (e) {
         console.error("Error sending ready signal to parent:", e);
       }

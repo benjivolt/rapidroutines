@@ -49,14 +49,12 @@ const LoginPage = () => {
         
             if (result.success) {
                 if (rememberMe) {
-                localStorage.setItem("rememberedEmail", email.trim());
+                    localStorage.setItem("rememberedEmail", email.trim());
                 } else {
                     localStorage.removeItem("rememberedEmail");
                 }
             
                 navigate(from, { replace: true });
-            } else {
-        
             }
         } catch (err) {
             console.error("Login error:", err);
@@ -180,7 +178,7 @@ const LoginPage = () => {
                     </button>
                     
                     <p className="text-center text-sm text-slate-600">
-                        Don't have an account?{" "}
+                        Don&apos;t have an account?{" "}
                         <Link to="/signup" className="font-medium text-[#1e628c] hover:underline">
                             Sign up
                         </Link>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
-import { AlertCircle, CheckCircle, ArrowLeft, Mail, Info } from "lucide-react";
+import { AlertCircle, ArrowLeft, Mail, Info } from "lucide-react";
 import logoLight from "@/assets/main_logo.png";
 
 const ForgotPasswordPage = () => {
@@ -21,9 +21,8 @@ const ForgotPasswordPage = () => {
         
         try {
             const success = await forgotPassword(email);
-            
-            setIsSubmitted(true);
-            setIsSuccess(true);
+            setIsSubmitted(success);
+            setIsSuccess(success);
         } catch (err) {
             setError(err?.message || "Failed to send password reset email. Please try again.");
             setIsSubmitted(false);
@@ -67,7 +66,7 @@ const ForgotPasswordPage = () => {
                             </div>
                             <h3 className="text-lg font-medium text-green-800">Check your inbox</h3>
                             <p className="text-center text-green-700">
-                                We've sent a password reset link to <strong>{email}</strong>. 
+                                We&apos;ve sent a password reset link to <strong>{email}</strong>. 
                                 Please check your email and follow the instructions to reset your password.
                             </p>
                             <p className="text-sm text-green-600">
@@ -76,7 +75,7 @@ const ForgotPasswordPage = () => {
                         </div>
                         
                         <div className="mt-6 text-center space-y-4">
-                            <p className="text-sm text-slate-600">Didn't receive the email? Check your spam folder or try again.</p>
+                            <p className="text-sm text-slate-600">Didn&apos;t receive the email? Check your spam folder or try again.</p>
                             <button 
                                 onClick={() => setIsSubmitted(false)}
                                 className="text-[#1e628c] hover:underline font-medium"

@@ -31,8 +31,6 @@ const RepBotPage = () => {
                     
                     processedExercises.current.set(exerciseKey, true);
                     
-                    console.log(`Exercise logged: ${exerciseType}, ${repCount} reps at ${exerciseTimestamp}`);
-                    
                     if (processedExercises.current.size > 50) {
                         const entries = Array.from(processedExercises.current.entries());
                         entries.slice(0, entries.length - 50).forEach(([key]) => {
@@ -74,7 +72,6 @@ const RepBotPage = () => {
                         }));
                         
                         processedExercises.current.set(exerciseKey, true);
-                        console.log(`Exercise from localStorage logged: ${exerciseData.type}, ${exerciseData.count} reps at ${exerciseTimestamp}`);
                     }
                 }
             } catch (error) {

@@ -24,8 +24,6 @@ const ChatbotPage = () => {
         if (chatEnded || !isAuthenticated) return; 
         
         if (currentConversation.current.length > 0) {
-            console.log("Saving chat conversation:", currentConversation.current);
-            
             addChatSession({
                 messages: currentConversation.current
             });
@@ -33,6 +31,8 @@ const ChatbotPage = () => {
             setChatEnded(true);
         }
     };
+    const handleChatEndRef = useRef(handleChatEnd);
+    handleChatEndRef.current = handleChatEnd;
     
     useEffect(() => {
         const loadPreviousConversation = async () => {
@@ -43,15 +43,11 @@ const ChatbotPage = () => {
             const conversation = chatHistory.find(chat => chat.id.toString() === conversationId);
             
             if (conversation && conversation.messages && conversation.messages.length > 0) {
-                console.log("Loading previous conversation:", conversation);
-                
                 currentConversation.current = [...conversation.messages];
                 
                 const success = await loadChatHistory(iframeRef.current, conversation.messages);
                 
-                if (success) {
-                    console.log("Successfully loaded conversation history");
-                } else {
+                if (!success) {
                     console.error("Failed to load conversation history");
                 }
             }
@@ -71,7 +67,7 @@ const ChatbotPage = () => {
     
     useEffect(() => {
         return () => {
-            handleChatEnd();
+            handleChatEndRef.current();
         };
     }, [isAuthenticated]);
     
@@ -88,12 +84,10 @@ const ChatbotPage = () => {
                         content,
                         timestamp: new Date().toISOString()
                     });
-                    
-                    console.log("Received chat message:", { role, content });
                 }
             },
             chatEnded: () => {
-                handleChatEnd();
+                handleChatEndRef.current();
             }
         };
         

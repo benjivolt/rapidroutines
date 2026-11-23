@@ -48,7 +48,7 @@ function App() {
 
                 <Route path="/exercise-tracker" element={
                     <Layout>
-                        <ExerciseTrackerPage limited={!isAuthenticated} />
+                        <ExerciseTrackerPage />
                     </Layout>
                 } />
 
@@ -60,7 +60,7 @@ function App() {
 
                 <Route path="/rapidtree" element={
                     <Layout>
-                        <RapidTreePage limited={!isAuthenticated} />
+                        <RapidTreePage />
                     </Layout>
                 } />
 

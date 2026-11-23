@@ -1,12 +1,13 @@
 {
-  "name": "rapidroutines-site",
+  "name": "rapidroutines",
   "private": true,
-  "dependencies": {
-    "nodemailer": "^6.9.16"
-  },
   "scripts": {
-    "dev": "node local-server.js",
-    "serve": "node local-server.js",
-    "build:dashboard": "cd dashboard_main && npm run build && cd .. && rm -rf dashboard && mkdir -p dashboard && cp -R dashboard_main/dist/* dashboard/"
+    "build": "npm --prefix dashboard_main ci && npm --prefix dashboard_main run build && npm --prefix dashboard_main/backend ci --omit=dev",
+    "start": "node dashboard_main/backend/server.js",
+    "test": "npm --prefix dashboard_main/backend test",
+    "build:dashboard": "npm --prefix dashboard_main run build && rm -rf dashboard && cp -R dashboard_main/dist dashboard"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }
