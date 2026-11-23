@@ -33,7 +33,6 @@ const PASSWORD_RESET_SUCCESS_TEMPLATE = `
       <ul style="margin: 0; padding-left: 20px; color: #4b5563;">
         <li style="margin-bottom: 8px;">Use a unique password</li>
         <li style="margin-bottom: 8px;">Never share your password</li>
-        <li style="margin-bottom: 8px;">Update your password regularly</li>
       </ul>
     </div>
 
@@ -41,7 +40,7 @@ const PASSWORD_RESET_SUCCESS_TEMPLATE = `
   </div>
 
   <div style="text-align: center; margin-top: 20px; color: #6b7280; font-size: 13px;">
-    <p style="margin: 5px 0;">© 2025 RapidRoutines. All rights reserved.</p>
+    <p style="margin: 5px 0;">© 2026 RapidRoutines. All rights reserved.</p>
     <p style="margin: 5px 0;">This is a transactional email related to your account.</p>
   </div>
 </body>
@@ -80,7 +79,7 @@ const PASSWORD_RESET_REQUEST_TEMPLATE = `
   </div>
 
   <div style="text-align: center; margin-top: 20px; color: #6b7280; font-size: 13px;">
-    <p style="margin: 5px 0;">© 2025 RapidRoutines. All rights reserved.</p>
+    <p style="margin: 5px 0;">© 2026 RapidRoutines. All rights reserved.</p>
     <p style="margin: 5px 0;">This is a transactional email related to your account.</p>
   </div>
 </body>
@@ -138,7 +137,7 @@ const WELCOME_EMAIL_TEMPLATE = `
   </div>
 
   <div style="text-align: center; margin-top: 20px; color: #6b7280; font-size: 13px;">
-    <p style="margin: 5px 0;">© 2025 RapidRoutines. All rights reserved.</p>
+    <p style="margin: 5px 0;">© 2026 RapidRoutines. All rights reserved.</p>
     <p style="margin: 5px 0;">123 Fitness Street, Exercise City</p>
     <p style="margin: 5px 0;">This is a transactional email related to your account registration.</p>
   </div>
@@ -146,7 +145,41 @@ const WELCOME_EMAIL_TEMPLATE = `
 </html>
 `;
 
+const EMAIL_CHANGED_TEMPLATE = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your account email was changed</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8fafc;">
+  <div style="background-color: #1e628c; padding: 24px 20px; text-align: center; border-radius: 8px 8px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">Your account email was changed</h1>
+  </div>
+
+  <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; border-top: none;">
+    <p style="margin: 16px 0; color: #4b5563;">Hello,</p>
+
+    <p style="margin: 16px 0; color: #4b5563;">The email address on your RapidRoutines account was just changed. This address will no longer receive account emails, and you were signed out on your other devices.</p>
+
+    <p style="margin: 16px 0; color: #4b5563;">If you made this change, you do not need to do anything.</p>
+
+    <p style="margin: 16px 0; color: #4b5563;">If you did not make this change, contact us right away at support@rapidroutines.org.</p>
+
+    <p style="margin: 24px 0 16px 0; color: #4b5563;">Thank you,<br>The RapidRoutines Team</p>
+  </div>
+
+  <div style="text-align: center; margin-top: 20px; color: #6b7280; font-size: 13px;">
+    <p style="margin: 5px 0;">© 2026 RapidRoutines. All rights reserved.</p>
+    <p style="margin: 5px 0;">This is a transactional email related to your account.</p>
+  </div>
+</body>
+</html>
+`;
+
 module.exports = {
+  EMAIL_CHANGED_TEMPLATE,
   PASSWORD_RESET_SUCCESS_TEMPLATE,
   PASSWORD_RESET_REQUEST_TEMPLATE,
   WELCOME_EMAIL_TEMPLATE,

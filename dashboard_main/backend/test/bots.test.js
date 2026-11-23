@@ -2,6 +2,7 @@ const { describe, it, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const request = require('supertest');
 const { app, startDb, stopDb } = require('./helpers');
+const chatbotRoutes = require('../routes/chatbot');
 
 const point = (x, y) => ({ x, y, z: 0, visibility: 1 });
 
@@ -114,12 +115,13 @@ describe('chatbot', () => {
       ],
     });
     assert.equal(res.status, 200);
-    assert.equal(res.body.candidates[0].content.parts[0].text, '**Plan**\n- Do push-ups');
+    assert.deepEqual(res.body, { reply: '**Plan**\n- Do push-ups' });
     assert.equal(calls.length, 1);
     assert.doesNotMatch(calls[0].url, /key=/);
     assert.equal(calls[0].options.headers['x-goog-api-key'], 'test-gemini-key');
     const sent = JSON.parse(calls[0].options.body);
     assert.equal(sent.generationConfig.maxOutputTokens, 1024);
+    assert.deepEqual(sent.generationConfig.thinkingConfig, { thinkingBudget: 0 });
     assert.doesNotMatch(sent.contents[0].parts[0].text, /ignore all rules/);
   });
 
@@ -130,7 +132,42 @@ describe('chatbot', () => {
     const res = await ask({ query: 'hello there' });
     assert.equal(res.status, 502);
     assert.doesNotMatch(JSON.stringify(res.body), /SECRET|API key|INVALID/);
-    assert.deepEqual(Object.keys(res.body), ['error']);
+    assert.deepEqual(Object.keys(res.body), ['message']);
+  });
+
+  it('treats an empty candidate as a failure and logs the finish reason', async () => {
+    stubFetch(200, { candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' }] });
+    const logged = [];
+    const realError = console.error;
+    console.error = (...args) => logged.push(args.join(' '));
+    try {
+      const res = await ask({ query: 'hello there' });
+      assert.equal(res.status, 502);
+      assert.deepEqual(Object.keys(res.body), ['message']);
+    } finally {
+      console.error = realError;
+    }
+    assert.ok(logged.some((line) => line.includes('MAX_TOKENS')));
+  });
+
+  it('enforces the process-wide daily cap without calling upstream', async () => {
+    const previous = process.env.CHATBOT_DAILY_LIMIT;
+    try {
+      stubFetch(200, { candidates: [{ content: { parts: [{ text: 'ok' }] } }] });
+      process.env.CHATBOT_DAILY_LIMIT = String(chatbotRoutes.dailyUsage().count + 1);
+      assert.equal((await ask({ query: 'first' })).status, 200);
+      const blocked = await ask({ query: 'second' });
+      assert.equal(blocked.status, 503);
+      assert.match(blocked.body.message, /daily limit/);
+      assert.equal(calls.length, 1);
+
+      process.env.CHATBOT_DAILY_LIMIT = '0';
+      assert.equal((await ask({ query: 'third' })).status, 503);
+      assert.equal(calls.length, 1);
+    } finally {
+      if (previous === undefined) delete process.env.CHATBOT_DAILY_LIMIT;
+      else process.env.CHATBOT_DAILY_LIMIT = previous;
+    }
   });
 
   it('handles non-JSON upstream responses and network errors generically', async () => {

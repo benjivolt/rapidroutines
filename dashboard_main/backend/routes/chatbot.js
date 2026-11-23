@@ -117,6 +117,20 @@ const MAX_TURNS = 6;
 const KB_TTL_MS = 5 * 60 * 1000;
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 let knowledgeCache = { docs: null, loadedAt: 0 };
+const usage = { day: '', count: 0 };
+
+const dailyLimit = () => {
+  const limit = Number.parseInt(process.env.CHATBOT_DAILY_LIMIT ?? '', 10);
+  return Number.isFinite(limit) && limit >= 0 ? limit : 2000;
+};
+
+function takeDailySlot() {
+  const day = new Date().toISOString().slice(0, 10);
+  if (usage.day !== day) Object.assign(usage, { day, count: 0 });
+  if (usage.count >= dailyLimit()) return false;
+  usage.count += 1;
+  return true;
+}
 
 async function knowledgeDocs() {
   if (knowledgeCache.docs && Date.now() - knowledgeCache.loadedAt < KB_TTL_MS) return knowledgeCache.docs;
@@ -136,11 +150,14 @@ function cleanContext(context) {
 router.post('/generate', chatbotLimiter, async (req, res) => {
   const userQuery = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
   if (!userQuery || userQuery.length > MAX_QUERY) {
-    return res.status(400).json({ error: `Send a message between 1 and ${MAX_QUERY} characters.` });
+    return res.status(400).json({ message: `Send a message between 1 and ${MAX_QUERY} characters.` });
   }
   if (!process.env.GEMINI_API_KEY) {
     console.error('GEMINI_API_KEY is not set');
-    return res.status(503).json({ error: 'The assistant is unavailable right now.' });
+    return res.status(503).json({ message: 'The assistant is unavailable right now.' });
+  }
+  if (!takeDailySlot()) {
+    return res.status(503).json({ message: 'The assistant has reached its daily limit. Try again tomorrow.' });
   }
 
   try {
@@ -151,7 +168,7 @@ router.post('/generate', chatbotLimiter, async (req, res) => {
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 1024 },
+        generationConfig: { maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } },
       }),
       signal: AbortSignal.timeout(20000),
     });
@@ -159,15 +176,22 @@ router.post('/generate', chatbotLimiter, async (req, res) => {
     const body = await geminiResponse.json().catch(() => null);
     const text = body?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!geminiResponse.ok || typeof text !== 'string' || !text.trim()) {
-      console.error('Gemini error:', geminiResponse.status, JSON.stringify(body?.error || {}).slice(0, 300));
-      return res.status(502).json({ error: 'The assistant could not answer that. Try again.' });
+      console.error(
+        'Gemini error:',
+        geminiResponse.status,
+        'finishReason:',
+        body?.candidates?.[0]?.finishReason || 'none',
+        JSON.stringify(body?.error || {}).slice(0, 300),
+      );
+      return res.status(502).json({ message: 'The assistant could not answer that. Try again.' });
     }
 
-    return res.json({ candidates: [{ content: { parts: [{ text: normalizeChatbotText(text) }] } }] });
+    return res.json({ reply: normalizeChatbotText(text) });
   } catch (error) {
     console.error('Chatbot generation error:', error.message);
-    return res.status(502).json({ error: 'The assistant could not answer that. Try again.' });
+    return res.status(502).json({ message: 'The assistant could not answer that. Try again.' });
   }
 });
 
 module.exports = router;
+module.exports.dailyUsage = () => ({ ...usage, limit: dailyLimit() });

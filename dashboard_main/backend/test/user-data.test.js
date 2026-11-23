@@ -116,4 +116,24 @@ describe('user data', () => {
     const res = await save(a.token, { dataType: 'chatHistory', data: ['x'.repeat(200 * 1024)] });
     assert.equal(res.status, 200);
   });
+  it('returns a generic 500 if measuring the payload throws', async () => {
+    const realByteLength = Buffer.byteLength;
+    Buffer.byteLength = function byteLength(value, ...rest) {
+      if (value === '["__boom__"]') throw new Error('boom');
+      return realByteLength.call(this, value, ...rest);
+    };
+    try {
+      const res = await save(a.token, { dataType: 'chatHistory', data: ['__boom__'] });
+      assert.equal(res.status, 500);
+      assert.deepEqual(res.body, { message: 'Could not save your data.' });
+    } finally {
+      Buffer.byteLength = realByteLength;
+    }
+  });
+
+  it('applies the cap to each data type separately', async () => {
+    const big = ['x'.repeat(200 * 1024)];
+    assert.equal((await save(a.token, { dataType: 'chatHistory', data: big })).status, 200);
+    assert.equal((await save(a.token, { dataType: 'exerciseLog', data: big })).status, 200);
+  });
 });

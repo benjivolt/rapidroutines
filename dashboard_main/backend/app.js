@@ -3,12 +3,14 @@ const path = require('path');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
+const compression = require('compression');
 
 const authRoutes = require('./routes/auth');
 const userDataRoutes = require('./routes/user-data');
 const contactRoutes = require('./routes/contact');
 const chatbotRoutes = require('./routes/chatbot');
 const repbotRoutes = require('./routes/repbot');
+const { PUBLIC_DIRS, PUBLIC_PAGES, isPublicPath } = require('./lib/public-paths');
 
 const siteRoot = path.resolve(__dirname, '../..');
 const dashboardBuild = [path.resolve(__dirname, '../dist'), path.join(siteRoot, 'dashboard')].find((dir) =>
@@ -18,8 +20,6 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'https://rapidroutines.org,h
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
-const PRIVATE_PATH =
-  /^\/(?:\.|dashboard_main|node_modules|api\/|local-server|package(?:-lock)?\.json|vercel\.json|README)/i;
 
 const app = express();
 app.disable('x-powered-by');
@@ -60,6 +60,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(compression());
 app.use(cors({ origin: (origin, done) => done(null, !origin || allowedOrigins.includes(origin)) }));
 app.use(express.json({ limit: '300kb' }));
 
@@ -71,25 +72,34 @@ app.use('/api/repbot', repbotRoutes);
 app.get('/api', (req, res) => res.json({ status: 'ok' }));
 app.all('/api/*', (req, res) => res.status(404).json({ message: 'Not found' }));
 
-const isPrivatePath = (rawPath) => {
-  try {
-    return PRIVATE_PATH.test(path.posix.normalize(decodeURIComponent(rawPath).replace(/\\/g, '/')));
-  } catch {
-    return true;
-  }
+const dashboardAssets = dashboardBuild && path.join(dashboardBuild, 'assets') + path.sep;
+const setCacheHeaders = (res, filePath) => {
+  if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  else if (dashboardAssets && filePath.startsWith(dashboardAssets)) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  } else res.setHeader('Cache-Control', 'public, max-age=604800');
 };
+const staticOptions = { dotfiles: 'deny', index: ['index.html'], redirect: true, setHeaders: setCacheHeaders };
+const sendHtml = (file, status = 200) => (req, res) =>
+  res.status(status).set('Cache-Control', 'no-cache').sendFile(file);
+const notFound = sendHtml(path.join(siteRoot, 'index.html'), 404);
 
-app.use((req, res, next) => (isPrivatePath(req.path) ? res.status(404).send('Not found') : next()));
+app.use((req, res, next) => (isPublicPath(req.path) ? next() : notFound(req, res)));
 
-const staticOptions = { dotfiles: 'deny', index: ['index.html'], extensions: ['html'] };
 if (dashboardBuild) {
   app.use('/dashboard', express.static(dashboardBuild, staticOptions));
-  app.get('/dashboard/*', (req, res) => res.sendFile(path.join(dashboardBuild, 'index.html')));
+  app.get('/dashboard/*', sendHtml(path.join(dashboardBuild, 'index.html')));
 } else {
   console.warn('Dashboard build not found. Run npm run build:dashboard.');
 }
-app.use(express.static(siteRoot, staticOptions));
-app.use((req, res) => res.status(404).sendFile(path.join(siteRoot, 'index.html')));
+for (const dir of PUBLIC_DIRS) {
+  app.use(`/${dir}`, express.static(path.join(siteRoot, dir), staticOptions));
+}
+for (const page of PUBLIC_PAGES) {
+  const routes = page === 'index' ? ['/', '/index.html'] : [`/${page}`, `/${page}.html`];
+  app.get(routes, sendHtml(path.join(siteRoot, `${page}.html`)));
+}
+app.use(notFound);
 
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);

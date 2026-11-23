@@ -5,9 +5,22 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 const UserData = require('../models/user-data');
 const auth = require('../middleware/auth');
-const { loginLimiter, accountLimiter } = require('../lib/rate-limit');
+const {
+  loginLimiter,
+  registerLimiter,
+  forgotIpLimiter,
+  forgotEmailLimiter,
+  resetLimiter,
+  profileLimiter,
+  passwordCheckLimiter,
+} = require('../lib/rate-limit');
 const { PASSWORD_RULES, isEmail, isPassword, isName, isString } = require('../lib/validate');
-const { sendPasswordResetEmail, sendResetSuccessEmail, sendWelcomeEmail } = require('../utils/emailService');
+const {
+  sendEmailChangedNotice,
+  sendPasswordResetEmail,
+  sendResetSuccessEmail,
+  sendWelcomeEmail,
+} = require('../utils/emailService');
 
 const router = express.Router();
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'https://rapidroutines.org').replace(/\/$/, '');
@@ -32,7 +45,7 @@ const publicUser = (user) => ({
 const normalizeEmail = (email) => String(email).trim().toLowerCase();
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
-router.post('/register', accountLimiter, async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   const { name, email, password } = req.body;
   if (!isName(name)) {
     return res.status(400).json({ message: 'Enter a name up to 50 characters.' });
@@ -102,7 +115,7 @@ router.post('/logout', auth, async (req, res) => {
   }
 });
 
-router.post('/forgot-password', accountLimiter, async (req, res) => {
+router.post('/forgot-password', forgotIpLimiter, forgotEmailLimiter, async (req, res) => {
   const { email } = req.body;
   if (!isEmail(email)) {
     return res.status(400).json({ message: 'Enter a valid email address.' });
@@ -125,7 +138,7 @@ router.post('/forgot-password', accountLimiter, async (req, res) => {
   res.json({ message: RESET_SENT });
 });
 
-router.post('/reset-password', accountLimiter, async (req, res) => {
+router.post('/reset-password', resetLimiter, async (req, res) => {
   const { token, password } = req.body;
   if (!isString(token, 128)) {
     return res.status(400).json({ message: 'This reset link is invalid or has expired.' });
@@ -156,7 +169,7 @@ router.post('/reset-password', accountLimiter, async (req, res) => {
   }
 });
 
-router.put('/update-profile', auth, async (req, res) => {
+router.put('/update-profile', auth, profileLimiter, passwordCheckLimiter, async (req, res) => {
   const { name, email, currentPassword } = req.body;
   if (!isName(name)) {
     return res.status(400).json({ message: 'Enter a name up to 50 characters.' });
@@ -171,6 +184,7 @@ router.put('/update-profile', auth, async (req, res) => {
 
     user.name = name.trim();
     let token;
+    const previousEmail = user.email;
     const nextEmail = email === undefined ? user.email : normalizeEmail(email);
     if (nextEmail !== user.email) {
       if (!isString(currentPassword, 128) || !(await user.matchPassword(currentPassword))) {
@@ -180,11 +194,16 @@ router.put('/update-profile', auth, async (req, res) => {
         return res.status(400).json({ message: 'That email is already in use.' });
       }
       user.email = nextEmail;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
       user.tokenVersion = (user.tokenVersion || 0) + 1;
       token = signToken(user);
     }
 
     await user.save();
+    if (token) {
+      sendEmailChangedNotice(previousEmail).catch((err) => console.error('Email change notice failed:', err.message));
+    }
     res.json({ user: publicUser(user), ...(token && { token }) });
   } catch (err) {
     console.error('Update profile failed:', err.message);
@@ -192,7 +211,7 @@ router.put('/update-profile', auth, async (req, res) => {
   }
 });
 
-router.delete('/delete-account', auth, async (req, res) => {
+router.delete('/delete-account', auth, passwordCheckLimiter, async (req, res) => {
   const { currentPassword } = req.body || {};
   try {
     const user = await User.findById(req.user.id);
