@@ -9,9 +9,6 @@ const DATA_TYPES = ['savedExercises', 'exerciseLog', 'chatHistory', 'rapidTreePr
 
 router.post('/save-data', dataLimiter, auth, async (req, res) => {
   const { dataType, data } = req.body || {};
-  if (data !== undefined && Buffer.byteLength(JSON.stringify(data) || '') > MAX_DATA_BYTES) {
-    return res.status(413).json({ message: 'That is more data than one account can store.' });
-  }
   if (!dataType || !data) {
     return res.status(400).json({ message: 'Data type and content are required' });
   }
@@ -20,6 +17,9 @@ router.post('/save-data', dataLimiter, auth, async (req, res) => {
   }
 
   try {
+    if (Buffer.byteLength(JSON.stringify(data) || '') > MAX_DATA_BYTES) {
+      return res.status(413).json({ message: 'That is more than 256 KB, which is the limit for each kind of saved data.' });
+    }
     const updatedUserData = await UserData.findOneAndUpdate(
       { user: req.user.id },
       { [dataType]: data, $setOnInsert: { user: req.user.id }, updatedAt: Date.now() },

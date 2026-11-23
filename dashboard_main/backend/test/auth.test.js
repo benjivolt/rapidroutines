@@ -274,6 +274,38 @@ describe('update-profile', () => {
     assert.equal((await request(app).get('/api/auth/user').set(bearer(res.body.token))).status, 200);
   });
 
+  it('clears pending reset tokens and notifies the old address on email change', async () => {
+    await request(app).post('/api/auth/forgot-password').send({ email: 'user@example.com' });
+    const resetToken = sentEmails.find((m) => m.subject === 'Reset your password').html.match(RESET_URL_RE)[2];
+    sentEmails.length = 0;
+
+    const res = await request(app)
+      .put('/api/auth/update-profile')
+      .set(bearer(token))
+      .send({ name: 'Test User', email: 'moved@example.com', currentPassword: PASSWORD });
+    assert.equal(res.status, 200);
+
+    const stored = await User.findOne({ email: 'moved@example.com' });
+    assert.equal(stored.resetPasswordToken, undefined);
+    assert.equal(stored.resetPasswordExpires, undefined);
+    const reset = await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token: resetToken, password: 'N3w!Password' });
+    assert.equal(reset.status, 400);
+
+    assert.equal(sentEmails.length, 1);
+    assert.equal(sentEmails[0].to, 'user@example.com');
+    assert.match(sentEmails[0].subject, /email was changed/);
+    assert.doesNotMatch(sentEmails[0].html, /moved@example\.com/);
+  });
+
+  it('sends no notice for a name-only change', async () => {
+    sentEmails.length = 0;
+    const res = await request(app).put('/api/auth/update-profile').set(bearer(token)).send({ name: 'Renamed' });
+    assert.equal(res.status, 200);
+    assert.equal(sentEmails.length, 0);
+  });
+
   it('does not allow taking an existing email', async () => {
     const res = await request(app)
       .put('/api/auth/update-profile')
@@ -315,5 +347,30 @@ describe('delete-account', () => {
     assert.equal(await User.countDocuments(), 0);
     assert.equal(await UserData.countDocuments(), 0);
     assert.equal((await request(app).get('/api/auth/user').set(bearer(token))).status, 401);
+  });
+});
+
+describe('email configuration', () => {
+  const { spawnSync } = require('child_process');
+  const loadConfig = (env) =>
+    spawnSync(
+      process.execPath,
+      [
+        '-e',
+        "require('./utils/resend.config').resendClient.emails.send({ to: 'a@example.com', subject: 'Reset', html: '<a href=\"https://x.test/r/1\">r</a>' }).then((r) => console.log(JSON.stringify(r)))",
+      ],
+      { cwd: require('path').join(__dirname, '..'), env: { ...process.env, RESEND_API_KEY: '', ...env }, encoding: 'utf8' },
+    );
+
+  it('logs emails to the console when RESEND_API_KEY is unset outside production', () => {
+    const out = loadConfig({ NODE_ENV: 'development' });
+    assert.equal(out.status, 0, out.stderr);
+    assert.match(out.stdout, /email not sent.*a@example\.com.*https:\/\/x\.test\/r\/1/);
+  });
+
+  it('refuses to start without RESEND_API_KEY in production', () => {
+    const out = loadConfig({ NODE_ENV: 'production' });
+    assert.notEqual(out.status, 0);
+    assert.match(out.stderr, /RESEND_API_KEY is not set/);
   });
 });

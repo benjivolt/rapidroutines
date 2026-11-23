@@ -1,6 +1,7 @@
 require('dotenv').config();
 
-for (const name of ['MONGO_URI', 'JWT_SECRET', 'RESEND_API_KEY']) {
+const required = ['MONGO_URI', 'JWT_SECRET', ...(process.env.NODE_ENV === 'production' ? ['RESEND_API_KEY'] : [])];
+for (const name of required) {
   if (!process.env[name]) {
     console.error(`${name} is not set`);
     process.exit(1);

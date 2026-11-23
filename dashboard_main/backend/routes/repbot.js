@@ -262,7 +262,7 @@ router.post('/process_landmarks', repbotLimiter, (req, res) => {
     return res.json(PROCESSORS[exerciseType](landmarks, state, Date.now(), REP_COOLDOWN_MS, HOLD_THRESHOLD_MS));
   } catch (error) {
     console.error('RepBot processing error:', error);
-    return res.status(500).json({ error: 'Could not process this frame.' });
+    return res.status(500).json({ message: 'Could not process this frame.' });
   }
 });
 
